@@ -1,0 +1,636 @@
+from typing import TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
+from app.knowledge import retrieve_knowledge
+from app.llm_client import LLMClientError, SemanticAnalysisResult, analyze_email_with_llm
+import os
+import time
+
+from app.models import AgentMetrics, EmailRecord, WorkflowStep
+
+
+class EmailWorkflowState(TypedDict):
+    email: EmailRecord
+    use_llm: bool
+
+
+def process_email(email: EmailRecord, use_llm: bool = True) -> EmailRecord:
+    email.steps = []
+    email.agent_metrics = AgentMetrics()
+    result = email_workflow.invoke({"email": email, "use_llm": use_llm})
+    return result["email"]
+
+
+def build_email_context(email: EmailRecord) -> str:
+    attachment_lines: list[str] = []
+    for attachment in email.attachments:
+        meta = f"{attachment.filename} ({attachment.content_type or 'unknown'}, {attachment.size_bytes} bytes)"
+        if attachment.text_preview:
+            attachment_lines.append(f"{meta}: {attachment.text_preview}")
+        else:
+            attachment_lines.append(meta)
+
+    attachment_context = "\n".join(attachment_lines)
+    if not attachment_context:
+        return f"{email.subject}\n\n{email.body}"
+    return f"{email.subject}\n\n{email.body}\n\nAttachments:\n{attachment_context}"
+
+
+def preprocess_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    email = state["email"]
+    text = build_email_context(email).lower()
+    is_chinese = contains_chinese(text)
+    email.detected_language = "zh" if is_chinese else "en"
+
+    preprocess_rules = [
+        ({"refund", "退款", "退费"}, "payment_change"),
+        ({"cancel", "取消"}, "churn_risk"),
+        ({"legal", "lawyer", "法律", "律师", "起诉"}, "legal_risk"),
+        ({"third email", "第三次", "多次"}, "repeated_contact"),
+        ({"blocked", "阻塞", "无法使用"}, "business_blocked"),
+    ]
+    email.preprocessing_flags = [
+        flag for terms, flag in preprocess_rules if any(term in text for term in terms)
+    ]
+    if email.attachments:
+        email.preprocessing_flags.append("has_attachment")
+
+    email.steps.append(
+        WorkflowStep(
+            name="Preprocess email",
+            status="complete",
+            summary=f"Detected language: {email.detected_language}, flags: {len(email.preprocessing_flags)}",
+            detail="Low-cost preprocessing detects language, strong policy signals, repeated contact, and business-blocking hints before any LLM call.",
+            confidence=0.95,
+        )
+    )
+    return {"email": email}
+
+
+def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    email = state["email"]
+    email_context = build_email_context(email)
+    text = email_context.lower()
+    llm_result = None
+    llm_error = ""
+    if state.get("use_llm", True):
+        llm_api_configured = bool(os.getenv("LLM_API_KEY") or os.getenv("SILICONFLOW_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
+        if llm_api_configured:
+            email.agent_metrics.llm_calls += 1
+            email.agent_metrics.input_tokens += estimate_tokens(email_context) + 260
+        try:
+            llm_result = analyze_email_with_llm(
+                subject=email.subject,
+                body=email_context,
+                detected_language=email.detected_language,
+                preprocessing_flags=email.preprocessing_flags,
+            )
+        except LLMClientError as exc:
+            llm_error = str(exc)
+
+    if llm_result:
+        apply_llm_analysis(email, llm_result)
+        email.agent_metrics.output_tokens += estimate_tokens(email.analysis_reason) + sum(estimate_tokens(flag) for flag in email.risk_flags) + 30
+        update_estimated_cost(email)
+        detail = email.analysis_reason
+        if email.preprocessing_flags:
+            detail = f"{detail} Preprocessing flags: {', '.join(email.preprocessing_flags)}."
+        email.steps.append(
+            WorkflowStep(
+                name="Semantic analysis",
+                status="warning" if email.should_escalate else "complete",
+                summary=f"{email.category.replace('_', ' ')} / {email.risk_level} risk / {email.confidence:.0%} confidence",
+                detail=detail,
+                confidence=email.confidence,
+            )
+        )
+        return {"email": email}
+
+    category, confidence, matched = classify_semantically(text)
+    is_chinese = email.detected_language == "zh"
+    risk_rules = [
+        (
+            {"refund", "退款", "退费"},
+            "Refund or payment change requires review before sending.",
+            "退款或付款变更需要人工审核后才能发送。",
+        ),
+        (
+            {"cancel", "取消"},
+            "Cancellation risk should be handled by a specialist.",
+            "客户存在取消风险，需要客服专员介入。",
+        ),
+        (
+            {"legal", "法律", "律师"},
+            "Legal language requires human review.",
+            "邮件包含法律或律师相关表达，需要人工审核。",
+        ),
+        (
+            {"third email", "第三次", "多次"},
+            "Repeated contact indicates customer frustration.",
+            "客户多次联系，说明情绪或问题升级。",
+        ),
+        (
+            {"blocked", "阻塞", "无法使用"},
+            "Blocked business workflow increases urgency.",
+            "客户业务流程受阻，需要提高处理优先级。",
+        ),
+    ]
+    risk_flags = [
+        chinese_message if is_chinese else english_message
+        for terms, english_message, chinese_message in risk_rules
+        if any(term in text for term in terms)
+    ]
+    strong_flag_count = len(set(email.preprocessing_flags))
+    risk_level = "high" if risk_flags or strong_flag_count >= 2 else ("medium" if category in {"technical", "billing"} else "low")
+
+    email.category = category
+    email.confidence = confidence
+    email.risk_level = risk_level
+    email.risk_flags = [
+        *risk_flags,
+    ]
+    email.should_escalate = risk_level == "high"
+    email.priority = risk_level
+    email.analysis_reason = build_analysis_reason(email, matched)
+    if llm_error:
+        email.analysis_reason = f"{email.analysis_reason} LLM fallback reason: {llm_error}"
+
+    email.steps.append(
+        WorkflowStep(
+            name="Semantic analysis",
+            status="warning" if email.should_escalate else "complete",
+            summary=f"{category.replace('_', ' ')} / {risk_level} risk / {confidence:.0%} confidence",
+            detail=email.analysis_reason,
+            confidence=confidence,
+        )
+    )
+    return {"email": email}
+
+
+def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    email = state["email"]
+    relevant, reason = is_customer_support_request(email)
+    if relevant:
+        email.steps.append(
+            WorkflowStep(
+                name="Relevance gate",
+                status="complete",
+                summary="Customer support request",
+                detail="The email contains a support intent and can continue through RAG retrieval and draft generation.",
+                confidence=0.86,
+            )
+        )
+        return {"email": email}
+
+    email.status = "irrelevant"
+    email.category = "other"
+    email.priority = "low"
+    email.risk_level = "low"
+    email.risk_flags = []
+    email.should_escalate = False
+    email.knowledge_hits = []
+    email.draft_reply = ""
+    is_chinese_email = contains_chinese(build_email_context(email))
+    email.review_note = "非客服业务邮件，已拦截，不生成回复。" if is_chinese_email else "Non-support email filtered out. No reply draft generated."
+    email.steps.append(
+        WorkflowStep(
+            name="Relevance gate",
+            status="blocked",
+            summary="Non-support email filtered out",
+            detail=reason,
+            confidence=0.88,
+        )
+    )
+    return {"email": email}
+
+
+def route_after_relevance(state: EmailWorkflowState) -> str:
+    return "irrelevant" if state["email"].status == "irrelevant" else "relevant"
+
+
+def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
+    text = build_email_context(email).lower()
+    sender = f"{email.customer_name} {email.customer_email}".lower()
+    support_terms = {
+        "refund", "invoice", "billing", "charged", "duplicate", "login", "password", "access",
+        "workspace", "cannot", "can't", "failed", "help", "support", "issue", "problem",
+        "退款", "退费", "发票", "账单", "扣费", "重复扣费", "登录", "密码", "无法", "不能",
+        "帮", "帮助", "问题", "故障", "打不开", "开票", "保修", "订单", "物流",
+    }
+    notification_terms = {
+        "unsubscribe", "no-reply", "noreply", "notification", "security alert", "login alert",
+        "new login", "verification code", "email_forward_notice", "privacy", "newsletter",
+        "oauth application", "third-party oauth", "authorized to access your account",
+        "security events", "security-log", "settings/security-log", "do not forward this email",
+        "退订", "动态更新", "新通知", "登录提醒", "安全提醒", "验证码", "请勿转发", "如果不希望再收到",
+        "了解详情", "meta platforms", "facebook.com", "github", "google", "microsoft",
+    }
+    security_notification_terms = {
+        "oauth application", "third-party oauth", "authorized to access your account",
+        "security events", "security-log", "settings/security-log", "verification code",
+        "new login", "login alert", "security alert", "do not forward this email",
+    }
+    platform_senders = {
+        "facebook", "meta", "github", "google", "microsoft", "qq邮箱团队", "notification", "no-reply", "noreply",
+    }
+
+    has_support_intent = any(term in text for term in support_terms)
+    has_notification_signal = any(term in text or term in sender for term in notification_terms | platform_senders)
+    from_platform = any(term in sender for term in platform_senders)
+    has_platform_security_signal = from_platform and any(term in text for term in security_notification_terms)
+
+    if has_platform_security_signal:
+        return False, "Detected platform security notification without a customer support request."
+    if has_notification_signal and not has_support_intent:
+        return False, "Detected platform notification, security alert, newsletter, or unsubscribe-style email without a customer support request."
+    if from_platform and not has_support_intent:
+        return False, "Detected platform sender without a customer support intent."
+    if email.category == "other" and email.confidence < 0.7 and not has_support_intent:
+        return False, "The email does not contain a clear customer support intent."
+    return True, "The email contains customer support intent."
+
+
+def retrieve_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    email = state["email"]
+    started_at = time.perf_counter()
+    email.knowledge_hits = retrieve_knowledge(build_email_context(email), category=email.category)
+    email.agent_metrics.rag_latency_ms = round((time.perf_counter() - started_at) * 1000)
+    email.agent_metrics.embedding_calls += 1
+    email.agent_metrics.embedding_tokens += estimate_tokens(build_email_context(email))
+    update_estimated_cost(email)
+    confidence = email.knowledge_hits[0].score if email.knowledge_hits else 0.32
+    email.steps.append(
+        WorkflowStep(
+            name="Retrieve knowledge",
+            status="complete" if email.knowledge_hits else "warning",
+            summary=f"Found {len(email.knowledge_hits)} relevant source(s)",
+            detail="RAG retrieval embeds the email intent, filters by category when possible, and ranks knowledge chunks by semantic and keyword relevance.",
+            confidence=confidence,
+        )
+    )
+    return {"email": email}
+
+
+def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    email = state["email"]
+    email.draft_reply = build_draft_reply(email)
+    email.agent_metrics.output_tokens += estimate_tokens(email.draft_reply)
+    update_estimated_cost(email)
+    email.steps.append(
+        WorkflowStep(
+            name="Draft reply",
+            status="complete",
+            summary="Generated customer-ready draft",
+            detail="Draft generation uses the detected category, risk level, and top retrieved policy source.",
+            confidence=0.78 if email.knowledge_hits else 0.55,
+        )
+    )
+    return {"email": email}
+
+
+def regenerate_draft_reply(email: EmailRecord) -> EmailRecord:
+    variant = next_reply_variant(email)
+    email.draft_reply = build_draft_reply(email, variant=variant)
+    email.agent_metrics.output_tokens += estimate_tokens(email.draft_reply)
+    update_estimated_cost(email)
+    email.steps.append(
+        WorkflowStep(
+            name="Regenerate draft reply",
+            status="complete",
+            summary=f"Generated reply draft variant {variant}",
+            detail="The operator requested another draft version while keeping the same category, risk level, and knowledge grounding.",
+            confidence=0.76 if email.knowledge_hits else 0.52,
+        )
+    )
+    return email
+
+
+def next_reply_variant(email: EmailRecord) -> str:
+    if not email.draft_reply.strip():
+        return "default"
+    generated_count = sum(1 for step in email.steps if step.name == "Regenerate draft reply")
+    return f"alternative-{(generated_count % 3) + 1}"
+
+
+def build_draft_reply(email: EmailRecord, variant: str = "default") -> str:
+    is_chinese = contains_chinese(build_email_context(email))
+    return build_structured_draft_reply(email, variant, is_chinese)
+
+    if is_chinese and variant.startswith("alternative"):
+        if email.category == "refund":
+            bodies = [
+                "我已经看到你反馈的重复扣费问题。下一步会先核对订阅和支付记录，确认重复扣款后按退款流程处理，并同步处理进度。",
+                "关于这笔疑似重复扣费，我们会先核验付款流水和订阅状态。如果确认重复收费，会按退款流程为你处理。",
+                "收到你的退款请求。我们将优先检查本月账单和扣款记录，并在确认后给出退款安排和预计处理时间。",
+            ]
+        elif email.category == "technical":
+            bodies = [
+                "这类登录问题通常需要先排查重置链接、验证码或登录会话是否失效。建议重新发起重置并清理缓存；如果仍无法进入，我们会继续升级排查。",
+                "建议先重新获取重置链接，并使用无痕窗口或清理缓存后再试一次。如果问题复现，我们会继续检查账号访问状态。",
+                "我们会从重置链接有效性、登录会话和账号权限三个方向排查。你可以先尝试重新发送链接，仍失败的话我们会升级处理。",
+            ]
+        elif email.category == "complaint":
+            bodies = [
+                "抱歉这个问题已经影响到你的团队。我们会将该工单交给更高优先级的支持人员跟进，优先解决当前阻塞。",
+                "很抱歉之前的响应没有达到预期。我们会提高该工单优先级，并安排人工专员继续跟进。",
+                "理解这个问题已经造成影响。我们会尽快接手并同步后续处理进度，优先帮助你的团队恢复正常使用。",
+            ]
+        elif email.category == "billing":
+            bodies = [
+                "关于发票或账单问题，我会先按账号和账期定位记录。请补充需要开具或核对的账单月份，便于我们尽快处理。",
+                "我可以协助核对发票政策和账单记录。请确认对应工作区、账单周期以及需要处理的发票类型。",
+                "收到你的发票问题。我们会先检查账单月份和付款记录，再确认是否满足开票或调整条件。",
+            ]
+        elif email.category == "product_question":
+            bodies = [
+                "Pro 版本主要面向团队协作、审计管理和更高等级支持。如果你能补充团队规模和使用场景，我可以给出更贴近需求的说明。",
+                "Pro 方案适合需要团队空间、权限控制和优先支持的客户。你可以告诉我当前使用场景，我会补充对应能力说明。",
+                "我可以根据你的团队规模和集成需求，整理 Pro 版本与当前方案的差异，方便你判断是否升级。",
+            ]
+        else:
+            bodies = [
+                "感谢你的来信。我会根据邮件内容确认问题类型，并将其转入合适的客服处理流程。",
+                "收到你的反馈。我们会先核对问题背景，再安排对应支持流程继续处理。",
+                "谢谢你提供的信息。我会先整理关键问题，并交由合适的支持路径跟进。",
+            ]
+        body = pick_variant_body(bodies, variant)
+        return f"{email.customer_name} 你好，\n\n{body}\n\n客服团队"
+
+    if not is_chinese and variant.startswith("alternative"):
+        if email.category == "refund":
+            bodies = [
+                "I see the duplicate billing concern. I will check the subscription and payment records first, then move the confirmed duplicate charge into the refund flow.",
+                "Thanks for flagging the possible duplicate charge. I will verify the billing record and confirm the refund path if the extra payment is found.",
+                "I will review the June invoice and payment history, then follow up with the refund status if the duplicate charge is confirmed.",
+            ]
+        elif email.category == "technical":
+            bodies = [
+                "This looks like an access issue that may involve an expired reset link, invalid token, or browser session state. Please request a new reset link and clear cache first; we can escalate if the issue continues.",
+                "Please try a fresh reset link in a private browser window first. If access is still blocked, I will route the case for deeper account checks.",
+                "I will help narrow this down across reset-link validity, browser state, and account permissions. Start with a new reset link, and we can escalate if it still fails.",
+            ]
+        elif email.category == "complaint":
+            bodies = [
+                "I am sorry this has disrupted your team. I will route this case to a higher-priority support path so we can focus on unblocking you quickly.",
+                "I understand the delay has been frustrating. I will escalate this to a support specialist and keep the focus on getting your team unblocked.",
+                "Thank you for the context. We will prioritize this case and follow up with the next action as soon as a specialist reviews it.",
+            ]
+        elif email.category == "billing":
+            bodies = [
+                "I can help locate the invoice or billing record. Please confirm the workspace and billing period so we can verify the correct document.",
+                "Please share the billing month and workspace name, and I will check the invoice policy and matching payment record.",
+                "I will review the invoice request against the account and billing period. Once confirmed, we can advise on the next billing action.",
+            ]
+        elif email.category == "product_question":
+            bodies = [
+                "The Pro plan is designed for team workflows, audit visibility, priority support, and advanced integrations. Share your use case and I can tailor the comparison.",
+                "Pro is best for teams that need shared workspaces, admin controls, and faster support. I can map the differences to your workflow if you share more context.",
+                "I can send a focused Pro comparison based on your team size, collaboration needs, and integration requirements.",
+            ]
+        else:
+            bodies = [
+                "Thanks for the details. I will review the request and route it to the right support workflow.",
+                "I appreciate the context. I will check the request and make sure it reaches the right support path.",
+                "Thanks for reaching out. I will summarize the issue and route it for the appropriate next step.",
+            ]
+        body = pick_variant_body(bodies, variant)
+        return f"Hi {email.customer_name},\n\n{body}\n\nBest,\nCustomer Support Team"
+
+    if is_chinese:
+        if email.category == "refund":
+            body = "我们识别到这封邮件可能涉及重复扣费或退款请求。我会先核验账单记录，并为重复付款准备退款处理。"
+        elif email.category == "technical":
+            body = "这个问题可能与重置链接过期、令牌失效或登录状态有关。建议先重新申请重置链接并清理浏览器缓存；如果仍无法访问，我们会升级处理。"
+        elif email.category == "complaint":
+            body = "很抱歉这个问题已经多次影响到你。该情况需要升级给人工客服专员，以便尽快跟进并解除阻塞。"
+        elif email.category == "billing":
+            body = "我可以协助处理账单或发票问题。请确认对应账号、账单月份和需要的开票信息。"
+        elif email.category == "product_question":
+            body = "Pro 版本包含团队空间、审计日志、优先支持和高级集成能力。我可以根据你的使用场景补充更具体的功能说明。"
+        else:
+            body = "感谢你的反馈。我会先核对邮件内容，并将问题转到合适的客服处理路径。"
+        return f"{email.customer_name} 你好，\n\n{body}\n\n客服团队"
+    else:
+        if email.category == "refund":
+            body = "We found signs of a duplicate subscription charge. I will verify the billing record and prepare the refund request for the duplicate payment."
+        elif email.category == "technical":
+            body = "The reset token may have expired or been invalidated. Please request a fresh reset link, clear your browser cache, and try again. I can also escalate this if access is still blocked."
+        elif email.category == "complaint":
+            body = "I am sorry this has taken multiple attempts. Your case should be escalated to a support specialist so we can unblock your team quickly."
+        elif email.category == "billing":
+            body = "I can help with the billing document request. Please confirm the account workspace and billing month so we can locate the correct record."
+        elif email.category == "product_question":
+            body = "The Pro plan includes advanced team capabilities and priority support. I can share the exact feature comparison for your workspace needs."
+        else:
+            body = "Thanks for reaching out. I will review the details and route this to the right support path."
+        return f"Hi {email.customer_name},\n\n{body}\n\nBest,\nCustomer Support Team"
+
+
+def strip_internal_reference_lines(text: str) -> str:
+    return "\n".join(
+        line
+        for line in text.splitlines()
+        if not line.strip().startswith(("Reference used:", "参考依据："))
+    ).strip()
+
+
+def build_structured_draft_reply(email: EmailRecord, variant: str, is_chinese: bool) -> str:
+    hit = email.knowledge_hits[0] if email.knowledge_hits else None
+    evidence = f"{hit.title}（{hit.source}）" if hit else ""
+    tone = select_reply_tone(variant)
+    if is_chinese:
+        opener = f"{email.customer_name} 你好，"
+        category_intro = {
+            "refund": "我已收到你关于重复扣费/退款的反馈。",
+            "technical": "我已收到你关于登录或访问异常的反馈。",
+            "complaint": "我已收到你的反馈，也理解这个问题已经影响到你的使用体验。",
+            "billing": "我已收到你关于账单或发票的咨询。",
+            "product_question": "我已收到你关于产品功能或套餐能力的咨询。",
+        }.get(email.category or "other", "我已收到你的来信。")
+        next_step = {
+            "refund": "我会先核对订阅记录、扣费流水和账单周期；如果确认存在重复扣费，会按退款流程继续处理并同步结果。",
+            "technical": "建议先重新获取一次重置链接，并在无痕窗口或清理缓存后重试；如果仍无法访问，我会把该工单升级给人工支持继续排查账号状态。",
+            "complaint": "这类情况需要提高处理优先级，我会将问题交给人工支持专员跟进，并优先确认当前阻塞点和下一步处理时间。",
+            "billing": "我会根据工作区、账单月份和开票信息核对记录；如果缺少必要信息，会再向你确认。",
+            "product_question": "我会根据你的使用场景说明对应功能、限制和适用套餐，必要时补充对比信息。",
+        }.get(email.category or "other", "我会先确认问题类型，并把邮件转入合适的客服处理流程。")
+        info_needed = {
+            "refund": "如方便，请补充付款时间、账单月份和相关订单号。",
+            "technical": "如方便，请补充报错截图、登录邮箱和问题发生时间。",
+            "complaint": "如方便，请补充受影响的团队/工作区以及希望优先解决的事项。",
+            "billing": "如方便，请补充工作区名称、账单月份和抬头/税号等开票信息。",
+            "product_question": "如方便，请补充团队规模、核心使用场景和当前套餐。",
+        }.get(email.category or "other", "如方便，请补充相关账号、时间和截图信息。")
+        evidence_line = f"\n\n参考依据：{evidence}。" if evidence else ""
+        return (
+            f"{opener}\n\n"
+            f"{category_intro}\n\n"
+            f"{next_step}\n\n"
+            f"{info_needed}\n\n"
+            f"我会在确认信息后继续推进，并尽量给出明确的处理结论或下一步安排。"
+            f"{evidence_line}\n\n"
+            f"客服团队"
+        )
+
+    greeting = f"Hi {email.customer_name},"
+    category_intro = {
+        "refund": "I received your message about the possible duplicate charge or refund request.",
+        "technical": "I received your message about the login or access issue.",
+        "complaint": "I received your feedback and understand this has affected your team's experience.",
+        "billing": "I received your billing or invoice question.",
+        "product_question": "I received your question about product capabilities or plan fit.",
+    }.get(email.category or "other", "Thanks for reaching out.")
+    next_step = {
+        "refund": "I will first verify the subscription record, payment history, and billing period. If the duplicate charge is confirmed, I will move it through the refund process and share the status.",
+        "technical": "Please request a fresh reset link and retry in a private window or after clearing your browser cache. If access is still blocked, I will escalate the ticket for account-level checks.",
+        "complaint": "This should be handled with higher priority. I will route it to a support specialist so we can identify the blocker and the next action quickly.",
+        "billing": "I will check the record using the workspace, billing month, and invoice details. If anything is missing, I will follow up with the exact information needed.",
+        "product_question": "I will map the relevant features, limits, and plan fit to your use case, and share a focused comparison if needed.",
+    }.get(email.category or "other", "I will review the details and route this to the right support path.")
+    info_needed = {
+        "refund": "If available, please share the payment date, billing month, and order or invoice ID.",
+        "technical": "If available, please share the error screenshot, login email, and when the issue started.",
+        "complaint": "If available, please share the affected workspace or team and the most urgent blocker.",
+        "billing": "If available, please share the workspace name, billing month, and invoice information.",
+        "product_question": "If available, please share your team size, main workflow, and current plan.",
+    }.get(email.category or "other", "If available, please share the related account, timing, and screenshot.")
+    evidence_line = f"\n\nReference: {evidence}." if evidence else ""
+    return (
+        f"{greeting}\n\n"
+        f"{category_intro}\n\n"
+        f"{next_step}\n\n"
+        f"{info_needed}\n\n"
+        f"I will keep the next step clear once the details are confirmed."
+        f"{evidence_line}\n\n"
+        f"Best,\nCustomer Support Team"
+    )
+
+
+def select_reply_tone(variant: str) -> str:
+    return "balanced" if variant == "default" else variant
+
+
+def estimate_tokens(text: str) -> int:
+    if not text:
+        return 0
+    ascii_chars = sum(1 for char in text if ord(char) < 128)
+    non_ascii_chars = len(text) - ascii_chars
+    return max(1, round(ascii_chars / 4 + non_ascii_chars / 1.6))
+
+
+def update_estimated_cost(email: EmailRecord) -> None:
+    llm_input_price = float(os.getenv("LLM_INPUT_CNY_PER_MTOK", "1.0"))
+    llm_output_price = float(os.getenv("LLM_OUTPUT_CNY_PER_MTOK", "2.0"))
+    embedding_price = float(os.getenv("EMBEDDING_CNY_PER_MTOK", "0.08"))
+    metrics = email.agent_metrics
+    cost = (
+        metrics.input_tokens / 1_000_000 * llm_input_price
+        + metrics.output_tokens / 1_000_000 * llm_output_price
+        + metrics.embedding_tokens / 1_000_000 * embedding_price
+    )
+    metrics.estimated_cost_cny = round(cost, 6)
+
+
+def pick_variant_body(bodies: list[str], variant: str) -> str:
+    try:
+        index = int(variant.rsplit("-", 1)[1]) - 1
+    except (IndexError, ValueError):
+        index = 0
+    return bodies[index % len(bodies)]
+
+
+def review_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    email = state["email"]
+    can_prepare_to_send = (
+        email.risk_level == "low"
+        and not email.should_escalate
+        and email.confidence >= 0.7
+        and bool(email.knowledge_hits)
+    )
+    email.status = "ready_to_send" if can_prepare_to_send else "human_review"
+    email.steps.append(
+        WorkflowStep(
+            name="Review decision",
+            status="complete" if can_prepare_to_send else "blocked",
+            summary="Ready for one-click sending" if can_prepare_to_send else "Human review required",
+            detail=(
+                "Low-risk, high-confidence replies with knowledge grounding are prepared for manual one-click sending. "
+                "High-risk, low-confidence, medium-risk, or weakly grounded replies remain in human review."
+            ),
+            confidence=0.88,
+        )
+    )
+    return {"email": email}
+
+
+def build_email_workflow():
+    graph = StateGraph(EmailWorkflowState)
+    graph.add_node("preprocess", preprocess_node)
+    graph.add_node("semantic_analysis", semantic_analysis_node)
+    graph.add_node("relevance_gate", relevance_gate_node)
+    graph.add_node("retrieve", retrieve_node)
+    graph.add_node("draft", draft_node)
+    graph.add_node("review", review_node)
+
+    graph.add_edge(START, "preprocess")
+    graph.add_edge("preprocess", "semantic_analysis")
+    graph.add_edge("semantic_analysis", "relevance_gate")
+    graph.add_conditional_edges("relevance_gate", route_after_relevance, {"irrelevant": END, "relevant": "retrieve"})
+    graph.add_edge("retrieve", "draft")
+    graph.add_edge("draft", "review")
+    graph.add_edge("review", END)
+
+    return graph.compile()
+
+
+email_workflow = build_email_workflow()
+
+
+def contains_chinese(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
+
+
+def classify_semantically(text: str) -> tuple[str, float, list[str]]:
+    rules = [
+        ("refund", {"refund", "charged", "duplicate", "payment", "退款", "退费", "扣费", "重复扣费", "重复收费", "付款"}),
+        ("complaint", {"unhappy", "cancel", "third email", "nobody", "blocked", "投诉", "不满意", "取消", "没人处理", "第三次", "阻塞"}),
+        ("technical", {"login", "password", "token", "invalid", "access", "登录", "密码", "验证码", "令牌", "无效", "无法访问", "进不去"}),
+        ("billing", {"invoice", "billing", "receipt", "tax", "发票", "账单", "收据", "税务", "开票"}),
+        ("product_question", {"feature", "plan", "integration", "workspace", "产品", "功能", "套餐", "版本", "集成", "工作区"}),
+    ]
+    best_category = "other"
+    best_matches: list[str] = []
+
+    for category, keywords in rules:
+        matches = [keyword for keyword in keywords if keyword in text]
+        if len(matches) > len(best_matches):
+            best_category = category
+            best_matches = matches
+
+    if not best_matches:
+        return "other", 0.58, []
+
+    confidence = min(0.94, 0.72 + len(best_matches) * 0.07)
+    return best_category, round(confidence, 2), best_matches
+
+
+def build_analysis_reason(email: EmailRecord, matched: list[str]) -> str:
+    if email.detected_language == "zh":
+        matched_text = "、".join(matched) if matched else "无明显关键词"
+        flags_text = "、".join(email.preprocessing_flags) if email.preprocessing_flags else "无强规则标记"
+        return f"语义分析识别到分类线索：{matched_text}；预处理标记：{flags_text}；综合风险等级为 {email.risk_level}。"
+
+    matched_text = ", ".join(matched) if matched else "no strong category signals"
+    flags_text = ", ".join(email.preprocessing_flags) if email.preprocessing_flags else "no strong rule flags"
+    return f"Semantic analysis found category signals: {matched_text}; preprocessing flags: {flags_text}; final risk level is {email.risk_level}."
+
+
+def apply_llm_analysis(email: EmailRecord, result: SemanticAnalysisResult) -> None:
+    email.category = result.category
+    email.confidence = round(result.confidence, 2)
+    email.risk_level = result.risk_level
+    email.risk_flags = result.risk_flags
+    email.should_escalate = result.should_escalate
+    email.priority = result.risk_level
+    email.analysis_reason = result.reason

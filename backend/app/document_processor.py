@@ -1,0 +1,416 @@
+import re
+import shutil
+import subprocess
+from tempfile import TemporaryDirectory
+from dataclasses import dataclass
+from pathlib import Path
+
+
+SUPPORTED_KNOWLEDGE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".doc"}
+
+
+@dataclass
+class ParsedChunk:
+    content: str
+    page_number: int | None = None
+    section_title: str = ""
+
+
+@dataclass
+class CleanResult:
+    text: str
+    original_chars: int
+    cleaned_chars: int
+    noise_lines_removed: int
+
+
+@dataclass
+class ParseReport:
+    file_type: str
+    parser: str
+    original_chars: int = 0
+    cleaned_chars: int = 0
+    noise_lines_removed: int = 0
+    page_count: int | None = None
+    pages_with_text: int | None = None
+    section_count: int = 0
+    table_count: int = 0
+    warnings: list[str] | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "file_type": self.file_type,
+            "parser": self.parser,
+            "original_chars": self.original_chars,
+            "cleaned_chars": self.cleaned_chars,
+            "noise_lines_removed": self.noise_lines_removed,
+            "page_count": self.page_count,
+            "pages_with_text": self.pages_with_text,
+            "section_count": self.section_count,
+            "table_count": self.table_count,
+            "warnings": self.warnings or [],
+        }
+
+
+@dataclass
+class ParsedDocument:
+    title: str
+    chunks: list[ParsedChunk]
+    report: ParseReport
+
+
+def parse_document(path: Path) -> ParsedDocument:
+    suffix = path.suffix.lower()
+    if suffix not in SUPPORTED_KNOWLEDGE_SUFFIXES:
+        raise ValueError("Only .md, .txt, .pdf, .docx and .doc knowledge files are supported.")
+    if suffix in {".md", ".txt"}:
+        return parse_text_document(path)
+    if suffix == ".pdf":
+        return parse_pdf_document(path)
+    if suffix == ".doc":
+        return parse_doc_document(path)
+    return parse_docx_document(path)
+
+
+def parse_text_document(path: Path) -> ParsedDocument:
+    raw_text = path.read_text(encoding="utf-8-sig")
+    clean = clean_text_with_report(raw_text)
+    title = extract_title(clean.text, path.stem)
+    chunks = split_markdown_like_text(clean.text)
+    report = ParseReport(
+        file_type=path.suffix.lower().lstrip("."),
+        parser="plain-text",
+        original_chars=clean.original_chars,
+        cleaned_chars=clean.cleaned_chars,
+        noise_lines_removed=clean.noise_lines_removed,
+        section_count=count_sections(chunks),
+    )
+    return ParsedDocument(title=title, chunks=chunks, report=report)
+
+
+def parse_pdf_document(path: Path) -> ParsedDocument:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise ValueError("PDF parsing dependency is missing. Please install pypdf.") from exc
+
+    reader = PdfReader(str(path))
+    page_chunks: list[ParsedChunk] = []
+    first_text = ""
+    total_original_chars = 0
+    total_cleaned_chars = 0
+    total_noise_lines = 0
+    pages_with_text = 0
+
+    for page_index, page in enumerate(reader.pages, start=1):
+        raw_text = page.extract_text() or ""
+        total_original_chars += len(raw_text)
+        clean = clean_text_with_report(raw_text)
+        total_cleaned_chars += clean.cleaned_chars
+        total_noise_lines += clean.noise_lines_removed
+        if not clean.text:
+            continue
+        pages_with_text += 1
+        first_text = first_text or clean.text
+        for chunk in split_markdown_like_text(clean.text, page_number=page_index):
+            page_chunks.append(chunk)
+
+    if not page_chunks:
+        raise ValueError("No extractable text found in this PDF. Scanned PDFs need OCR and are not supported yet.")
+
+    warnings = []
+    if pages_with_text < len(reader.pages):
+        warnings.append(f"{len(reader.pages) - pages_with_text} page(s) had no extractable text.")
+    report = ParseReport(
+        file_type="pdf",
+        parser="pypdf",
+        original_chars=total_original_chars,
+        cleaned_chars=total_cleaned_chars,
+        noise_lines_removed=total_noise_lines,
+        page_count=len(reader.pages),
+        pages_with_text=pages_with_text,
+        section_count=count_sections(page_chunks),
+        warnings=warnings,
+    )
+    return ParsedDocument(title=extract_title(first_text, path.stem), chunks=page_chunks, report=report)
+
+
+def parse_docx_document(path: Path) -> ParsedDocument:
+    try:
+        from docx import Document
+    except ImportError as exc:
+        raise ValueError("DOCX parsing dependency is missing. Please install python-docx.") from exc
+
+    document = Document(str(path))
+    blocks: list[str] = []
+    current_section = ""
+    raw_chars = 0
+
+    for paragraph in document.paragraphs:
+        raw_chars += len(paragraph.text or "")
+        text = clean_inline_text(paragraph.text)
+        if not text:
+            continue
+        style_name = (paragraph.style.name or "").lower() if paragraph.style else ""
+        if style_name.startswith("heading"):
+            current_section = text
+            blocks.append(f"## {text}")
+        elif current_section:
+            blocks.append(text)
+        else:
+            blocks.append(text)
+
+    for table in document.tables:
+        table_text = table_to_text(table)
+        raw_chars += len(table_text)
+        if table_text:
+            blocks.append(table_text)
+
+    clean = clean_text_with_report("\n\n".join(blocks))
+    if not clean.text:
+        raise ValueError("No extractable text found in this DOCX.")
+    chunks = split_markdown_like_text(clean.text)
+    report = ParseReport(
+        file_type="docx",
+        parser="python-docx",
+        original_chars=raw_chars,
+        cleaned_chars=clean.cleaned_chars,
+        noise_lines_removed=clean.noise_lines_removed,
+        section_count=count_sections(chunks),
+        table_count=len(document.tables),
+    )
+    return ParsedDocument(title=extract_title(clean.text, path.stem), chunks=chunks, report=report)
+
+
+def parse_doc_document(path: Path) -> ParsedDocument:
+    conversion_error = ""
+    try:
+        converted_path = convert_doc_to_docx(path)
+        try:
+            parsed = parse_docx_document(converted_path)
+            parsed.report.file_type = "doc"
+            parsed.report.parser = "LibreOffice -> python-docx"
+            parsed.report.warnings = [*(parsed.report.warnings or []), "Converted from legacy .doc to .docx before parsing."]
+            return parsed
+        finally:
+            converted_path.unlink(missing_ok=True)
+    except ValueError as exc:
+        conversion_error = str(exc)
+
+    try:
+        import olefile
+    except ImportError as exc:
+        raise ValueError("DOC parsing dependency is missing. Please install olefile.") from exc
+
+    if not olefile.isOleFile(str(path)):
+        raise ValueError(f"{conversion_error} Fallback failed: this .doc file is not a valid legacy Word OLE document.")
+
+    text_parts: list[str] = []
+    with olefile.OleFileIO(str(path)) as ole:
+        stream_names = ["/".join(item) for item in ole.listdir(streams=True)]
+        preferred_streams = [name for name in stream_names if name in {"WordDocument", "1Table", "0Table"}]
+        candidate_streams = preferred_streams or stream_names
+
+        for stream_name in candidate_streams:
+            try:
+                data = ole.openstream(stream_name).read()
+            except OSError:
+                continue
+            text_parts.extend(extract_readable_strings(data))
+
+    clean = clean_text_with_report("\n\n".join(text_parts))
+    if len(clean.text) < 20:
+        raise ValueError(
+            f"{conversion_error} Fallback failed: no reliable text could be extracted from this .doc file. "
+            "Please convert it to .docx or PDF and upload again."
+        )
+    chunks = split_markdown_like_text(clean.text)
+    report = ParseReport(
+        file_type="doc",
+        parser="olefile fallback",
+        original_chars=sum(len(part) for part in text_parts),
+        cleaned_chars=clean.cleaned_chars,
+        noise_lines_removed=clean.noise_lines_removed,
+        section_count=count_sections(chunks),
+        warnings=[conversion_error, "Used OLE text extraction fallback; formatting may be incomplete."],
+    )
+    return ParsedDocument(title=extract_title(clean.text, path.stem), chunks=chunks, report=report)
+
+
+def convert_doc_to_docx(path: Path) -> Path:
+    soffice = find_soffice()
+    if not soffice:
+        raise ValueError("LibreOffice was not found, so .doc could not be converted to .docx.")
+
+    with TemporaryDirectory() as tmp:
+        output_dir = Path(tmp)
+        command = [
+            str(soffice),
+            "--headless",
+            "--convert-to",
+            "docx",
+            "--outdir",
+            str(output_dir),
+            str(path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        converted = output_dir / f"{path.stem}.docx"
+        if result.returncode != 0 or not converted.exists():
+            message = (result.stderr or result.stdout or "LibreOffice did not produce a DOCX file.").strip()
+            raise ValueError(f"LibreOffice conversion failed: {message}")
+
+        stable_path = path.with_suffix(".converted.docx")
+        stable_path.write_bytes(converted.read_bytes())
+        return stable_path
+
+
+def find_soffice() -> Path | None:
+    found = shutil.which("soffice") or shutil.which("soffice.exe")
+    if found:
+        return Path(found)
+
+    candidates = [
+        Path("C:/Program Files/LibreOffice/program/soffice.exe"),
+        Path("C:/Program Files (x86)/LibreOffice/program/soffice.exe"),
+        Path("B:/LibreOffice/program/soffice.exe"),
+        Path("B:/tools/LibreOffice/program/soffice.exe"),
+        Path("A:/LibreOffice/program/soffice.exe"),
+        Path("A:/tools/LibreOffice/program/soffice.exe"),
+    ]
+    return next((candidate for candidate in candidates if candidate.exists()), None)
+
+
+def clean_text(text: str) -> str:
+    return clean_text_with_report(text).text
+
+
+def clean_text_with_report(text: str) -> CleanResult:
+    original_chars = len(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [clean_inline_text(line) for line in text.split("\n")]
+    noise_lines_removed = sum(1 for line in lines if is_noise_line(line))
+    lines = [line for line in lines if not is_noise_line(line)]
+    text = "\n".join(lines)
+    text = re.sub(r"(?<![。！？.!?:：；;])\n(?!\n|[#\-*0-9])", " ", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = text.strip()
+    return CleanResult(
+        text=text,
+        original_chars=original_chars,
+        cleaned_chars=len(text),
+        noise_lines_removed=noise_lines_removed,
+    )
+
+
+def extract_readable_strings(data: bytes) -> list[str]:
+    candidates: list[str] = []
+    candidates.extend(extract_decoded_runs(data.decode("utf-16le", errors="ignore")))
+    candidates.extend(extract_decoded_runs(data.decode("latin-1", errors="ignore")))
+
+    seen: set[str] = set()
+    readable: list[str] = []
+    for candidate in candidates:
+        normalized = clean_inline_text(candidate)
+        if len(normalized) < 4 or normalized in seen:
+            continue
+        if readable_ratio(normalized) < 0.55:
+            continue
+        seen.add(normalized)
+        readable.append(normalized)
+    return readable
+
+
+def extract_decoded_runs(text: str) -> list[str]:
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]+", "\n", text)
+    pattern = r"[\u4e00-\u9fffA-Za-z0-9，。！？、；：,.!?;:'\"()\[\]《》<>/\-_\s]{4,}"
+    return [match.group(0).strip() for match in re.finditer(pattern, text) if match.group(0).strip()]
+
+
+def readable_ratio(text: str) -> float:
+    if not text:
+        return 0.0
+    readable_chars = re.findall(r"[\u4e00-\u9fffA-Za-z0-9，。！？、；：,.!?;:'\"()\[\]《》<>/\-_\s]", text)
+    return len(readable_chars) / len(text)
+
+
+def clean_inline_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def is_noise_line(line: str) -> bool:
+    if not line:
+        return False
+    if re.fullmatch(r"[-_—=]{3,}", line):
+        return True
+    if re.fullmatch(r"(page\s*)?\d+(/\d+)?", line, flags=re.IGNORECASE):
+        return True
+    if re.fullmatch(r"第\s*\d+\s*页\s*(共\s*\d+\s*页)?", line):
+        return True
+    return False
+
+
+def split_markdown_like_text(text: str, page_number: int | None = None, max_chars: int = 900, overlap_chars: int = 100) -> list[ParsedChunk]:
+    blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
+    chunks: list[ParsedChunk] = []
+    current = ""
+    current_section = ""
+
+    for block in blocks:
+        heading = extract_heading(block)
+        if heading:
+            if current and len(current) > max_chars * 0.35:
+                chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=current_section))
+                current = tail_overlap(current, overlap_chars)
+            current_section = heading
+
+        if current and len(current) + len(block) + 2 > max_chars:
+            chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=current_section))
+            current = tail_overlap(current, overlap_chars)
+
+        current = f"{current}\n\n{block}".strip() if current else block
+
+    if current:
+        chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=current_section))
+    return chunks
+
+
+def count_sections(chunks: list[ParsedChunk]) -> int:
+    return len({chunk.section_title for chunk in chunks if chunk.section_title})
+
+
+def tail_overlap(text: str, overlap_chars: int) -> str:
+    if overlap_chars <= 0 or len(text) <= overlap_chars:
+        return ""
+    tail = text[-overlap_chars:].strip()
+    sentence_start = max(tail.rfind("。"), tail.rfind("."), tail.rfind("\n"))
+    return tail[sentence_start + 1 :].strip() if sentence_start >= 0 else tail
+
+
+def extract_title(text: str, fallback: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip("# ").strip()
+        if stripped and not is_noise_line(stripped):
+            return stripped[:120]
+    return fallback.replace("_", " ").replace("-", " ").title()
+
+
+def extract_heading(block: str) -> str:
+    first_line = block.splitlines()[0].strip()
+    markdown_heading = re.match(r"^#{1,4}\s+(.+)$", first_line)
+    if markdown_heading:
+        return markdown_heading.group(1).strip()[:120]
+    if len(first_line) <= 60 and re.match(r"^(\d+(\.\d+)*[、. ]*)?[\u4e00-\u9fffA-Za-z].*", first_line):
+        if len(block.splitlines()) == 1 or first_line.endswith(("：", ":")):
+            return first_line.strip("：:")[:120]
+    return ""
+
+
+def table_to_text(table) -> str:
+    rows: list[str] = []
+    for row in table.rows:
+        cells = [clean_inline_text(cell.text) for cell in row.cells]
+        cells = [cell for cell in cells if cell]
+        if cells:
+            rows.append(" | ".join(cells))
+    return "\n".join(rows)

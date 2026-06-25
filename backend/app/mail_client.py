@@ -1,0 +1,267 @@
+import imaplib
+import os
+import smtplib
+from dataclasses import dataclass
+from tempfile import TemporaryDirectory
+from pathlib import Path
+from email import message_from_bytes
+from email.header import decode_header
+from email.message import Message
+from email.mime.text import MIMEText
+from email.utils import parseaddr
+
+from dotenv import load_dotenv
+
+from app.document_processor import clean_text, parse_document
+from app.models import EmailAttachment, EmailCreate
+
+load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+
+class MailClientConfigError(Exception):
+    pass
+
+
+@dataclass
+class ImportedMail:
+    payload: EmailCreate
+    provider_message_id: str
+
+
+def fetch_unread_qq_emails(limit: int = 5) -> list[ImportedMail]:
+    address = required_env("QQ_EMAIL_ADDRESS")
+    auth_code = required_env("QQ_EMAIL_AUTH_CODE")
+    host = os.getenv("QQ_IMAP_HOST", "imap.qq.com")
+    port = int(os.getenv("QQ_IMAP_PORT", "993"))
+
+    with imaplib.IMAP4_SSL(host, port) as client:
+        client.login(address, auth_code)
+        client.select("INBOX")
+        status, data = client.search(None, "UNSEEN")
+        if status != "OK":
+            return []
+
+        ids = data[0].split()[-limit:]
+        imported: list[ImportedMail] = []
+        for mail_id in reversed(ids):
+            fetch_status, fetch_data = client.fetch(mail_id, "(BODY.PEEK[])")
+            if fetch_status != "OK" or not fetch_data:
+                continue
+
+            raw_message = next(
+                (part[1] for part in fetch_data if isinstance(part, tuple) and len(part) >= 2),
+                None,
+            )
+            if not raw_message:
+                continue
+
+            message = message_from_bytes(raw_message)
+            sender_name, sender_email = parseaddr(decode_mime_text(message.get("From", "")))
+            imported.append(
+                ImportedMail(
+                    payload=EmailCreate(
+                        customer_name=sender_name or sender_email or "QQ Mail User",
+                        customer_email=sender_email,
+                        subject=decode_mime_text(message.get("Subject", "(no subject)")),
+                        body=extract_plain_text(message),
+                        attachments=extract_attachments(message),
+                    ),
+                    provider_message_id=message.get("Message-ID", mail_id.decode("utf-8", errors="ignore")),
+                )
+            )
+
+        return imported
+
+
+def send_qq_email(*, to_address: str, subject: str, body: str) -> None:
+    from_address = required_env("QQ_EMAIL_ADDRESS")
+    auth_code = required_env("QQ_EMAIL_AUTH_CODE")
+    host = os.getenv("QQ_SMTP_HOST", "smtp.qq.com")
+    port = int(os.getenv("QQ_SMTP_PORT", "465"))
+
+    message = MIMEText(body, "plain", "utf-8")
+    message["From"] = from_address
+    message["To"] = to_address
+    message["Subject"] = subject
+
+    with smtplib.SMTP_SSL(host, port) as client:
+        client.login(from_address, auth_code)
+        client.sendmail(from_address, [to_address], message.as_string())
+
+
+def required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise MailClientConfigError(f"Missing required environment variable: {name}")
+    return value
+
+
+def decode_mime_text(value: str) -> str:
+    fragments = []
+    for payload, charset in decode_header(value):
+        if isinstance(payload, bytes):
+            fragments.append(decode_bytes(payload, charset))
+        else:
+            fragments.append(payload)
+    return "".join(fragments).strip()
+
+
+def extract_plain_text(message: Message) -> str:
+    if message.is_multipart():
+        for part in message.walk():
+            content_type = part.get_content_type()
+            disposition = part.get_content_disposition()
+            if content_type == "text/plain" and disposition != "attachment":
+                payload = part.get_payload(decode=True)
+                if payload:
+                    return decode_bytes(payload, part.get_content_charset()).strip()
+    else:
+        payload = message.get_payload(decode=True)
+        if payload:
+            return decode_bytes(payload, message.get_content_charset()).strip()
+
+    return "(empty email body)"
+
+
+def decode_bytes(payload: bytes, charset: str | None = None) -> str:
+    candidates = normalize_charset_candidates(charset)
+    best_text = ""
+    best_score = -1
+    for candidate in candidates:
+        try:
+            text = payload.decode(candidate, errors="strict")
+        except (LookupError, UnicodeDecodeError):
+            continue
+        score = score_decoded_text(text)
+        if score > best_score:
+            best_text = text
+            best_score = score
+    if best_text:
+        return best_text
+    return payload.decode("utf-8", errors="ignore")
+
+
+def normalize_charset_candidates(charset: str | None) -> list[str]:
+    candidates: list[str] = []
+    if charset:
+        normalized = charset.strip().strip('"').lower()
+        aliases = {
+            "gb2312": ["gb18030", "gbk", "gb2312"],
+            "gb_2312-80": ["gb18030", "gbk", "gb2312"],
+            "x-gbk": ["gb18030", "gbk"],
+            "cp936": ["gb18030", "gbk", "cp936"],
+        }
+        candidates.extend(aliases.get(normalized, [normalized]))
+    candidates.extend(["utf-8", "gb18030", "gbk", "big5", "utf-16", "latin-1"])
+    return list(dict.fromkeys(candidates))
+
+
+def score_decoded_text(text: str) -> int:
+    if not text:
+        return -100
+    replacement_penalty = text.count("�") * 20 + text.count("\x00") * 10
+    question_run_penalty = text.count("????") * 10
+    chinese_bonus = sum(1 for char in text if "\u4e00" <= char <= "\u9fff") * 2
+    readable_bonus = sum(1 for char in text if char.isprintable() or char in "\r\n\t")
+    return readable_bonus + chinese_bonus - replacement_penalty - question_run_penalty
+
+
+def extract_attachments(message: Message) -> list[EmailAttachment]:
+    if not message.is_multipart():
+        return []
+
+    attachments: list[EmailAttachment] = []
+    for part in message.walk():
+        filename = part.get_filename()
+        disposition = part.get_content_disposition()
+        if not filename and disposition != "attachment":
+            continue
+
+        payload = part.get_payload(decode=True) or b""
+        decoded_filename = decode_mime_text(filename or "attachment")
+        content_type = part.get_content_type()
+        attachments.append(build_attachment(decoded_filename, content_type, payload, part))
+    return attachments
+
+
+def build_attachment(filename: str, content_type: str, payload: bytes, part: Message) -> EmailAttachment:
+    preview, parse_status, status_message, parse_report = parse_attachment_payload(filename, content_type, payload, part)
+    return EmailAttachment(
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(payload),
+        text_preview=preview,
+        parse_status=parse_status,
+        status_message=status_message,
+        parse_report=parse_report,
+    )
+
+
+def parse_attachment_payload(filename: str, content_type: str, payload: bytes, part: Message) -> tuple[str, str, str, dict]:
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".pdf", ".docx", ".doc"} or content_type in {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        return parse_document_attachment(filename, content_type, payload)
+
+    text_preview = extract_text_attachment_preview(filename, content_type, part, payload)
+    if text_preview:
+        return text_preview, "parsed", "Text attachment parsed into the email context.", {
+            "file_type": suffix.lstrip(".") or content_type,
+            "parser": "mail-text",
+            "cleaned_chars": len(text_preview),
+        }
+    return "", "metadata_only", "Attachment metadata captured; content parsing is not supported for this file type.", {}
+
+
+def parse_document_attachment(filename: str, content_type: str, payload: bytes) -> tuple[str, str, str, dict]:
+    suffix = infer_document_suffix(filename, content_type)
+    with TemporaryDirectory() as tmp:
+        path = Path(tmp) / f"attachment{suffix or '.bin'}"
+        path.write_bytes(payload)
+        try:
+            parsed = parse_document(path)
+        except ValueError as exc:
+            return "", "failed", str(exc), {
+                "file_type": suffix.lstrip(".") or "unknown",
+                "parser": "document_processor",
+                "warnings": [str(exc)],
+            }
+
+    preview = build_document_preview(parsed.chunks)
+    return preview, "parsed", f"Parsed {len(parsed.chunks)} chunk(s) from attachment.", parsed.report.to_dict()
+
+
+def infer_document_suffix(filename: str, content_type: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix:
+        return suffix
+    return {
+        "application/pdf": ".pdf",
+        "application/msword": ".doc",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    }.get(content_type, "")
+
+
+def build_document_preview(chunks) -> str:
+    text = "\n\n".join(chunk.content for chunk in chunks)
+    return text[:3000].strip()
+
+
+def extract_text_attachment_preview(filename: str, content_type: str, part: Message, payload: bytes) -> str:
+    content_type = part.get_content_type()
+    filename = filename.lower()
+    text_like_suffixes = (".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".log")
+    if not (
+        content_type.startswith("text/")
+        or content_type in {"application/json", "application/xml"}
+        or filename.endswith(text_like_suffixes)
+    ):
+        return ""
+
+    text = decode_bytes(payload, part.get_content_charset())
+    return clean_text(text)[:3000]
