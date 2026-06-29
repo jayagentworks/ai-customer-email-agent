@@ -24,6 +24,11 @@ class LLMClientError(Exception):
     pass
 
 
+def is_llm_configured() -> bool:
+    base_url = os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+    return bool(resolve_llm_api_key(base_url))
+
+
 def analyze_email_with_llm(
     *,
     subject: str,
@@ -92,6 +97,115 @@ def analyze_email_with_llm(
         return SemanticAnalysisResult.model_validate_json(content)
     except (KeyError, TypeError, ValueError, ValidationError) as exc:
         raise LLMClientError("LLM response was not valid semantic analysis JSON") from exc
+
+
+def generate_reply_draft_with_llm(
+    *,
+    customer_name: str,
+    subject: str,
+    body: str,
+    category: str | None,
+    risk_level: str,
+    detected_language: str,
+    knowledge_hits: list[dict],
+    variant: str = "default",
+) -> str | None:
+    base_url = os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+    model = os.getenv("LLM_MODEL", "qwen-plus")
+    api_key = resolve_llm_api_key(base_url)
+    if not api_key:
+        return None
+    timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
+    max_tokens = int(os.getenv("LLM_DRAFT_MAX_TOKENS", "420"))
+    compact_hits = [
+        {
+            **hit,
+            "snippet": compact_text(str(hit.get("snippet", "")), 700),
+        }
+        for hit in knowledge_hits[:2]
+    ]
+
+    style_instruction = {
+        "default": "Use a clear, professional, concise support tone.",
+        "alternative-1": "Use a warmer support tone while staying specific.",
+        "alternative-2": "Use a more direct and action-oriented support tone.",
+        "alternative-3": "Use a slightly more detailed support tone without adding unsupported promises.",
+    }.get(variant, "Use a clear, professional, concise support tone.")
+
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a customer support reply drafting agent for a RAG email workflow. "
+                    "Write only the customer-facing reply body. Do not include markdown, JSON, citations, "
+                    "internal labels, confidence scores, or reference lines. "
+                    "Answer the customer's explicit question directly before asking for more information. "
+                    "Use only facts supported by the provided knowledge snippets. If the snippets do not support "
+                    "a claim, say that it needs confirmation instead of inventing details. "
+                    "For refund, contract, legal, security, account access, or high-risk cases, do not promise an outcome; "
+                    "state the review or escalation path. "
+                    "Match the detected language: use Chinese for zh and English for en."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "customer_name": customer_name,
+                        "subject": subject,
+                        "body": compact_text(body, 1200),
+                        "category": category,
+                        "risk_level": risk_level,
+                        "detected_language": detected_language,
+                        "reply_variant": variant,
+                        "style_instruction": style_instruction,
+                        "knowledge_hits": compact_hits,
+                        "requirements": [
+                            "Start with a natural greeting.",
+                            "Directly answer the main customer question using the knowledge hits.",
+                            "Explain the next step only when needed.",
+                            "Ask for missing information only after giving the best supported answer.",
+                            "End with a support-team signoff.",
+                            "Do not mention 'Reference used', chunk ids, RAG, knowledge base, or internal workflow.",
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        "temperature": 0.35 if variant == "default" else 0.55,
+        "max_tokens": max_tokens,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise LLMClientError(f"LLM request failed: {exc}") from exc
+
+    try:
+        content = response.json()["choices"][0]["message"]["content"]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise LLMClientError("LLM response did not contain a reply draft") from exc
+
+    draft = content.strip()
+    if not draft:
+        raise LLMClientError("LLM reply draft was empty")
+    return draft
+
+
+def compact_text(text: str, max_chars: int) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= max_chars:
+        return normalized
+    return f"{normalized[:max_chars].rstrip()}..."
 
 
 def resolve_llm_api_key(base_url: str) -> str | None:

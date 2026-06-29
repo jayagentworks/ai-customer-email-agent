@@ -1049,7 +1049,8 @@ h3 {
   border: 1px solid #dbe4ef;
   border-radius: 8px;
   background: #fff;
-  padding: 10px 12px;
+  padding: 10px 10px;
+  overflow: hidden;
 }
 
 .costMetric span {
@@ -1060,6 +1061,56 @@ h3 {
 .costMetric strong {
   font-size: 17px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.costMetric .costValue {
+  font-size: clamp(13px, 0.95vw, 17px);
+  letter-spacing: 0;
+}
+
+.draftProgress {
+  border: 1px solid #c9d8ea;
+  border-radius: 8px;
+  background: #f5f9ff;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.draftProgress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.draftProgress span {
+  color: #475569;
+  font-size: 13px;
+}
+
+.draftProgress strong {
+  color: #234f82;
+  font-size: 14px;
+}
+
+.draftProgressTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2eaf4;
+  overflow: hidden;
+}
+
+.draftProgressTrack div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2c568b, #4a7eba);
+  transition: width 240ms ease;
 }
 
 .runCostPanel .costMetrics {

@@ -126,6 +126,8 @@ type ReviewActionRecord = {
 
 type AgentMetrics = {
   llm_calls: number;
+  semantic_llm_calls: number;
+  draft_llm_calls: number;
   embedding_calls: number;
   input_tokens: number;
   output_tokens: number;
@@ -399,6 +401,7 @@ function App() {
   const [syncing, setSyncing] = useState(false);
   const [sendingId, setSendingId] = useState("");
   const [regeneratingId, setRegeneratingId] = useState("");
+  const [regenerateProgress, setRegenerateProgress] = useState(0);
   const [viewedReadyIds, setViewedReadyIds] = useState<string[]>([]);
   const [ingesting, setIngesting] = useState(false);
   const [savingKnowledge, setSavingKnowledge] = useState(false);
@@ -744,14 +747,32 @@ function App() {
 
   async function regenerateReply(emailId: string) {
     setRegeneratingId(emailId);
+    setRegenerateProgress(8);
+    const startedAt = Date.now();
+    const progressTimer = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const estimated = Math.min(90, 8 + Math.round((elapsed / 12000) * 82));
+      setRegenerateProgress((current) => Math.max(current, estimated));
+    }, 350);
     try {
       const response = await fetch(`${API_URL}/emails/${emailId}/draft/regenerate`, { method: "POST" });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "回复草稿生成失败");
+      }
       const updated = (await response.json()) as EmailRecord;
+      setRegenerateProgress(100);
       setEmails((items) => items.map((item) => (item.id === updated.id ? updated : item)));
       await loadOperationLogs();
       setSelectedId(updated.id);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "回复草稿生成失败");
     } finally {
-      setRegeneratingId("");
+      window.clearInterval(progressTimer);
+      window.setTimeout(() => {
+        setRegeneratingId("");
+        setRegenerateProgress(0);
+      }, 450);
     }
   }
 
@@ -828,7 +849,7 @@ function App() {
                 <Composer t={t} form={form} setForm={setForm} loading={loading} syncing={syncing} loadEmails={loadEmails} syncQQMail={syncQQMail} processEmail={processEmail} />
                 <EmailQueue title={t.inboxQueue} hint={t.inboxQueueHint} emails={emails} selectedId={selected?.id} locale={locale} setSelectedId={setSelectedId} />
               </div>
-              {selected && <EmailDetail selected={selected} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} />}
+              {selected && <EmailDetail selected={selected} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} />}
             </div>
           </>
         )}
@@ -836,7 +857,7 @@ function App() {
         {activeView === "review" && (
           <div className="reviewLayout">
             <EmailQueue title={t.navReview} hint={t.reviewSubtitle} emails={reviewEmails} selectedId={selectedReview?.id} locale={locale} setSelectedId={setSelectedId} />
-            {selectedReview ? <EmailDetail selected={selectedReview} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} /> : <EmptyModule title={t.navReview} text="当前没有需要审核的邮件。" />}
+            {selectedReview ? <EmailDetail selected={selectedReview} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} /> : <EmptyModule title={t.navReview} text="当前没有需要审核的邮件。" />}
           </div>
         )}
 
@@ -1161,13 +1182,13 @@ function AgentCostPanel({ metrics, locale }: { metrics: AgentMetrics; locale: Lo
   const items = locale === "zh"
     ? [
         ["Token", `${totalTokens}`],
-        ["LLM 调用", `${metrics.llm_calls}`],
+        ["LLM 总数", `${metrics.llm_calls}`],
         ["RAG 耗时", `${metrics.rag_latency_ms} ms`],
         ["单次成本", `¥${metrics.estimated_cost_cny.toFixed(6)}`],
       ]
     : [
         ["Tokens", `${totalTokens}`],
-        ["LLM calls", `${metrics.llm_calls}`],
+        ["LLM total", `${metrics.llm_calls}`],
         ["RAG latency", `${metrics.rag_latency_ms} ms`],
         ["Run cost", `¥${metrics.estimated_cost_cny.toFixed(6)}`],
       ];
@@ -1179,7 +1200,10 @@ function AgentCostPanel({ metrics, locale }: { metrics: AgentMetrics; locale: Lo
       </div>
       <div className="costMetrics">
         {items.map(([label, value]) => (
-          <div className="costMetric" key={label}><span>{label}</span><strong>{value}</strong></div>
+          <div className="costMetric" key={label}>
+            <span>{label}</span>
+            <strong className={label.includes("成本") || label.includes("cost") ? "costValue" : ""}>{value}</strong>
+          </div>
         ))}
       </div>
     </section>
@@ -1268,8 +1292,12 @@ function OperationLogRow({ log }: { log: OperationLog }) {
 }
 
 function normalizeAgentMetrics(metrics?: Partial<AgentMetrics>): AgentMetrics {
+  const llmCalls = metrics?.llm_calls ?? 0;
+  const draftCalls = metrics?.draft_llm_calls ?? 0;
   return {
-    llm_calls: metrics?.llm_calls ?? 0,
+    llm_calls: llmCalls,
+    semantic_llm_calls: metrics?.semantic_llm_calls ?? Math.max(llmCalls - draftCalls, 0),
+    draft_llm_calls: draftCalls,
     embedding_calls: metrics?.embedding_calls ?? 0,
     input_tokens: metrics?.input_tokens ?? 0,
     output_tokens: metrics?.output_tokens ?? 0,
@@ -1367,7 +1395,7 @@ function EmailQueue({ title, hint, emails, selectedId, locale, setSelectedId }: 
   );
 }
 
-function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regenerateReply, regeneratingId }: {
+function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regenerateReply, regeneratingId, regenerateProgress }: {
   selected: EmailRecord;
   locale: Locale;
   t: Record<string, string>;
@@ -1376,6 +1404,7 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
   sendingId: string;
   regenerateReply: (emailId: string) => void;
   regeneratingId: string;
+  regenerateProgress: number;
 }) {
   const [reviewNote, setReviewNote] = useState(safeEditableText(selected.review_note));
   const [revisedReply, setRevisedReply] = useState(safeEditableText(selected.draft_reply));
@@ -1387,6 +1416,7 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
   const visibleReviewActions = showAllReviewHistory ? reviewActions : reviewActions.slice(-3);
   const isIrrelevant = selected.status === "irrelevant";
   const metrics = normalizeAgentMetrics(selected.agent_metrics);
+  const isGeneratingReply = regeneratingId === selected.id;
 
   useEffect(() => {
     setReviewNote(safeEditableText(selected.review_note));
@@ -1397,9 +1427,9 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
 
   useEffect(() => {
     if (selected.status === "irrelevant") return;
-    if (safeEditableText(selected.draft_reply).trim() || regeneratingId === selected.id) return;
+    if (safeEditableText(selected.draft_reply).trim() || isGeneratingReply) return;
     regenerateReply(selected.id);
-  }, [selected.id, selected.status, selected.draft_reply, regeneratingId, regenerateReply]);
+  }, [selected.id, selected.status, selected.draft_reply, isGeneratingReply, regenerateReply]);
 
   return (
     <article className="detail">
@@ -1461,6 +1491,17 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
           </label>
           <label>
             <span>修改后的回复草稿</span>
+            {isGeneratingReply && (
+              <div className="draftProgress" aria-live="polite">
+                <div>
+                  <span>{locale === "zh" ? "正在生成回复草稿" : "Generating reply draft"}</span>
+                  <strong>{regenerateProgress}%</strong>
+                </div>
+                <div className="draftProgressTrack">
+                  <div style={{ width: `${regenerateProgress}%` }} />
+                </div>
+              </div>
+            )}
             <textarea value={revisedReply} onChange={(event) => setRevisedReply(event.target.value)} rows={8} wrap="soft" />
           </label>
         </div>}

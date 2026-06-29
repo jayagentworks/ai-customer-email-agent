@@ -35,7 +35,7 @@ from app.models import (
     ReviewAction,
 )
 from app.store import EmailStore
-from app.workflow import process_email, regenerate_draft_reply, strip_internal_reference_lines
+from app.workflow import process_email, regenerate_draft_reply, sanitize_customer_reply
 
 app = FastAPI(title="Customer Email Agent API")
 
@@ -242,7 +242,7 @@ def send_email_reply(email_id: str) -> EmailRecord:
         raise HTTPException(status_code=400, detail="Email must be approved before sending")
 
     try:
-        email.draft_reply = strip_internal_reference_lines(email.draft_reply)
+        email.draft_reply = sanitize_customer_reply(email.draft_reply)
         send_qq_email(
             to_address=email.customer_email,
             subject=f"Re: {email.subject}",

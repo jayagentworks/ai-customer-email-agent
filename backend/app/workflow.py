@@ -1,9 +1,16 @@
+import re
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
 from app.knowledge import retrieve_knowledge
-from app.llm_client import LLMClientError, SemanticAnalysisResult, analyze_email_with_llm
+from app.llm_client import (
+    LLMClientError,
+    SemanticAnalysisResult,
+    analyze_email_with_llm,
+    generate_reply_draft_with_llm,
+    is_llm_configured,
+)
 import os
 import time
 
@@ -78,6 +85,7 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
         llm_api_configured = bool(os.getenv("LLM_API_KEY") or os.getenv("SILICONFLOW_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
         if llm_api_configured:
             email.agent_metrics.llm_calls += 1
+            email.agent_metrics.semantic_llm_calls += 1
             email.agent_metrics.input_tokens += estimate_tokens(email_context) + 260
         try:
             llm_result = analyze_email_with_llm(
@@ -274,16 +282,29 @@ def retrieve_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
     email = state["email"]
-    email.draft_reply = build_draft_reply(email)
+    email.draft_reply, used_llm, draft_error = generate_draft_reply(email)
+    if used_llm:
+        email.agent_metrics.llm_calls += 1
+        email.agent_metrics.draft_llm_calls += 1
+        email.agent_metrics.input_tokens += estimate_draft_input_tokens(email)
     email.agent_metrics.output_tokens += estimate_tokens(email.draft_reply)
     update_estimated_cost(email)
+    detail = "Draft generation used the customer email, classification result, and retrieved knowledge snippets as LLM context."
+    status = "complete"
+    confidence = 0.86 if email.knowledge_hits else 0.68
+    if not used_llm:
+        detail = "LLM draft generation was unavailable, so the system used the structured fallback template."
+        if draft_error:
+            detail = f"{detail} Fallback reason: {draft_error}"
+        status = "warning"
+        confidence = 0.72 if email.knowledge_hits else 0.52
     email.steps.append(
         WorkflowStep(
             name="Draft reply",
-            status="complete",
+            status=status,
             summary="Generated customer-ready draft",
-            detail="Draft generation uses the detected category, risk level, and top retrieved policy source.",
-            confidence=0.78 if email.knowledge_hits else 0.55,
+            detail=detail,
+            confidence=confidence,
         )
     )
     return {"email": email}
@@ -291,16 +312,29 @@ def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 def regenerate_draft_reply(email: EmailRecord) -> EmailRecord:
     variant = next_reply_variant(email)
-    email.draft_reply = build_draft_reply(email, variant=variant)
+    email.draft_reply, used_llm, draft_error = generate_draft_reply(email, variant=variant)
+    if used_llm:
+        email.agent_metrics.llm_calls += 1
+        email.agent_metrics.draft_llm_calls += 1
+        email.agent_metrics.input_tokens += estimate_draft_input_tokens(email)
     email.agent_metrics.output_tokens += estimate_tokens(email.draft_reply)
     update_estimated_cost(email)
+    detail = "The operator requested another LLM-generated draft while keeping the same category, risk level, and knowledge grounding."
+    status = "complete"
+    confidence = 0.84 if email.knowledge_hits else 0.64
+    if not used_llm:
+        detail = "The operator requested another draft, but LLM generation was unavailable, so the fallback template was used."
+        if draft_error:
+            detail = f"{detail} Fallback reason: {draft_error}"
+        status = "warning"
+        confidence = 0.7 if email.knowledge_hits else 0.5
     email.steps.append(
         WorkflowStep(
             name="Regenerate draft reply",
-            status="complete",
+            status=status,
             summary=f"Generated reply draft variant {variant}",
-            detail="The operator requested another draft version while keeping the same category, risk level, and knowledge grounding.",
-            confidence=0.76 if email.knowledge_hits else 0.52,
+            detail=detail,
+            confidence=confidence,
         )
     )
     return email
@@ -313,9 +347,55 @@ def next_reply_variant(email: EmailRecord) -> str:
     return f"alternative-{(generated_count % 3) + 1}"
 
 
+def build_llm_knowledge_hits(email: EmailRecord) -> list[dict]:
+    return [
+        {
+            "title": hit.title,
+            "source": hit.source,
+            "snippet": hit.snippet,
+            "score": hit.score,
+            "semantic_score": hit.semantic_score,
+            "keyword_score": hit.keyword_score,
+            "category_score": hit.category_score,
+            "category": hit.category,
+        }
+        for hit in email.knowledge_hits[:3]
+    ]
+
+
+def estimate_draft_input_tokens(email: EmailRecord) -> int:
+    knowledge_context = "\n\n".join(
+        f"{hit.title} ({hit.source})\n{hit.snippet}" for hit in email.knowledge_hits[:3]
+    )
+    prompt_overhead = 520
+    return estimate_tokens(build_email_context(email)) + estimate_tokens(knowledge_context) + prompt_overhead
+
+
 def build_draft_reply(email: EmailRecord, variant: str = "default") -> str:
+    reply, _, _ = generate_draft_reply(email, variant=variant)
+    return reply
+
+
+def generate_draft_reply(email: EmailRecord, variant: str = "default") -> tuple[str, bool, str]:
     is_chinese = contains_chinese(build_email_context(email))
-    return build_structured_draft_reply(email, variant, is_chinese)
+    if is_llm_configured():
+        try:
+            draft = generate_reply_draft_with_llm(
+                customer_name=email.customer_name,
+                subject=email.subject,
+                body=build_email_context(email),
+                category=email.category,
+                risk_level=email.risk_level,
+                detected_language="zh" if is_chinese else "en",
+                knowledge_hits=build_llm_knowledge_hits(email),
+                variant=variant,
+            )
+            if draft:
+                return sanitize_customer_reply(draft), True, ""
+        except LLMClientError as exc:
+            return build_structured_draft_reply(email, variant, is_chinese), False, str(exc)
+
+    return build_structured_draft_reply(email, variant, is_chinese), False, "LLM API key is not configured."
 
     if is_chinese and variant.startswith("alternative"):
         if email.category == "refund":
@@ -435,9 +515,19 @@ def strip_internal_reference_lines(text: str) -> str:
     ).strip()
 
 
+def sanitize_customer_reply(text: str) -> str:
+    cleaned = strip_internal_reference_lines(text)
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+    cleaned = re.sub(r"(?<!\*)\*(?!\s)(.*?)(?<!\s)\*(?!\*)", r"\1", cleaned)
+    cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
+    return cleaned.strip()
+
+
 def build_structured_draft_reply(email: EmailRecord, variant: str, is_chinese: bool) -> str:
     hit = email.knowledge_hits[0] if email.knowledge_hits else None
     evidence = f"{hit.title}（{hit.source}）" if hit else ""
+    evidence_text = f"{hit.title}\n{hit.snippet}" if hit else ""
     tone = select_reply_tone(variant)
     if is_chinese:
         opener = f"{email.customer_name} 你好，"
@@ -453,7 +543,7 @@ def build_structured_draft_reply(email: EmailRecord, variant: str, is_chinese: b
             "technical": "建议先重新获取一次重置链接，并在无痕窗口或清理缓存后重试；如果仍无法访问，我会把该工单升级给人工支持继续排查账号状态。",
             "complaint": "这类情况需要提高处理优先级，我会将问题交给人工支持专员跟进，并优先确认当前阻塞点和下一步处理时间。",
             "billing": "我会根据工作区、账单月份和开票信息核对记录；如果缺少必要信息，会再向你确认。",
-            "product_question": "我会根据你的使用场景说明对应功能、限制和适用套餐，必要时补充对比信息。",
+            "product_question": build_product_answer(evidence_text, is_chinese=True),
         }.get(email.category or "other", "我会先确认问题类型，并把邮件转入合适的客服处理流程。")
         info_needed = {
             "refund": "如方便，请补充付款时间、账单月份和相关订单号。",
@@ -462,14 +552,13 @@ def build_structured_draft_reply(email: EmailRecord, variant: str, is_chinese: b
             "billing": "如方便，请补充工作区名称、账单月份和抬头/税号等开票信息。",
             "product_question": "如方便，请补充团队规模、核心使用场景和当前套餐。",
         }.get(email.category or "other", "如方便，请补充相关账号、时间和截图信息。")
-        evidence_line = f"\n\n参考依据：{evidence}。" if evidence else ""
         return (
             f"{opener}\n\n"
             f"{category_intro}\n\n"
             f"{next_step}\n\n"
             f"{info_needed}\n\n"
-            f"我会在确认信息后继续推进，并尽量给出明确的处理结论或下一步安排。"
-            f"{evidence_line}\n\n"
+            f"如果你愿意，我可以继续根据你的团队场景整理一版更具体的套餐适配建议。"
+            f"\n\n"
             f"客服团队"
         )
 
@@ -486,7 +575,7 @@ def build_structured_draft_reply(email: EmailRecord, variant: str, is_chinese: b
         "technical": "Please request a fresh reset link and retry in a private window or after clearing your browser cache. If access is still blocked, I will escalate the ticket for account-level checks.",
         "complaint": "This should be handled with higher priority. I will route it to a support specialist so we can identify the blocker and the next action quickly.",
         "billing": "I will check the record using the workspace, billing month, and invoice details. If anything is missing, I will follow up with the exact information needed.",
-        "product_question": "I will map the relevant features, limits, and plan fit to your use case, and share a focused comparison if needed.",
+        "product_question": build_product_answer(evidence_text, is_chinese=False),
     }.get(email.category or "other", "I will review the details and route this to the right support path.")
     info_needed = {
         "refund": "If available, please share the payment date, billing month, and order or invoice ID.",
@@ -495,16 +584,53 @@ def build_structured_draft_reply(email: EmailRecord, variant: str, is_chinese: b
         "billing": "If available, please share the workspace name, billing month, and invoice information.",
         "product_question": "If available, please share your team size, main workflow, and current plan.",
     }.get(email.category or "other", "If available, please share the related account, timing, and screenshot.")
-    evidence_line = f"\n\nReference: {evidence}." if evidence else ""
     return (
         f"{greeting}\n\n"
         f"{category_intro}\n\n"
         f"{next_step}\n\n"
         f"{info_needed}\n\n"
-        f"I will keep the next step clear once the details are confirmed."
-        f"{evidence_line}\n\n"
+        f"I can also tailor the plan recommendation if you share more about your team scenario."
+        f"\n\n"
         f"Best,\nCustomer Support Team"
     )
+
+
+def build_product_answer(evidence_text: str, is_chinese: bool) -> str:
+    text = evidence_text.lower()
+    if is_chinese:
+        supported: list[str] = []
+        if "团队工作区" in evidence_text or "team workspace" in text:
+            supported.append("团队协作/团队工作区")
+        if "权限" in evidence_text or "admin control" in text or "permission" in text:
+            supported.append("统一权限管理")
+        if "审计日志" in evidence_text or "audit" in text:
+            supported.append("审计日志")
+        if "高级集成" in evidence_text or "sso" in text or "webhook" in text or "api" in text:
+            supported.append("高级集成（如 SSO、Webhook、API 对接和数据同步）")
+        if supported:
+            return (
+                "根据当前知识库，Pro 套餐支持你提到的这些能力："
+                + "、".join(supported)
+                + "。其中团队工作区适合多人协作和统一管理，审计日志可用于追踪关键操作并支持合规场景，高级集成通常覆盖 SSO、Webhook、API 对接和数据同步。"
+            )
+        return "根据当前知识库，Pro 套餐主要面向团队协作、权限管理、审计追踪和高级集成等场景，整体上适合有团队协作和管理需求的客户。"
+
+    supported_en: list[str] = []
+    if "team workspace" in text or "团队工作区" in evidence_text:
+        supported_en.append("team workspaces")
+    if "permission" in text or "权限" in evidence_text:
+        supported_en.append("permission management")
+    if "audit" in text or "审计日志" in evidence_text:
+        supported_en.append("audit logs")
+    if "advanced integration" in text or "sso" in text or "webhook" in text or "api" in text:
+        supported_en.append("advanced integrations such as SSO, Webhooks, API access, and data sync")
+    if supported_en:
+        return (
+            "Based on the current knowledge base, the Pro plan supports "
+            + ", ".join(supported_en)
+            + ". It is designed for team collaboration, operational visibility, and integration-heavy workflows."
+        )
+    return "Based on the current knowledge base, the Pro plan is intended for team collaboration, permissions, audit visibility, and advanced integration scenarios."
 
 
 def select_reply_tone(variant: str) -> str:

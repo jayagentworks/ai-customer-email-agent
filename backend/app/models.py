@@ -113,6 +113,8 @@ class WorkflowStep(BaseModel):
 
 class AgentMetrics(BaseModel):
     llm_calls: int = 0
+    semantic_llm_calls: int = 0
+    draft_llm_calls: int = 0
     embedding_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
