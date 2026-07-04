@@ -351,27 +351,150 @@ def is_noise_line(line: str) -> bool:
 
 
 def split_markdown_like_text(text: str, page_number: int | None = None, max_chars: int = 900, overlap_chars: int = 100) -> list[ParsedChunk]:
-    blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
+    sections = split_into_sections(text)
     chunks: list[ParsedChunk] = []
-    current = ""
-    current_section = ""
+
+    for section_title, section_blocks in sections:
+        chunks.extend(
+            split_blocks_recursively(
+                section_blocks,
+                page_number=page_number,
+                section_title=section_title,
+                max_chars=max_chars,
+                overlap_chars=overlap_chars,
+            )
+        )
+    return chunks
+
+
+def split_into_sections(text: str) -> list[tuple[str, list[str]]]:
+    blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
+    sections: list[tuple[str, list[str]]] = []
+    current_title = ""
+    current_blocks: list[str] = []
 
     for block in blocks:
-        heading = extract_heading(block)
+        heading = extract_section_heading(block)
+        if heading and current_blocks:
+            sections.append((current_title, current_blocks))
+            current_blocks = []
         if heading:
-            if current and len(current) > max_chars * 0.35:
-                chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=current_section))
-                current = tail_overlap(current, overlap_chars)
-            current_section = heading
+            current_title = heading
+            if is_standalone_heading_block(block):
+                continue
+        current_blocks.append(block)
 
-        if current and len(current) + len(block) + 2 > max_chars:
-            chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=current_section))
-            current = tail_overlap(current, overlap_chars)
+    if current_blocks:
+        sections.append((current_title, current_blocks))
+    return sections
 
-        current = f"{current}\n\n{block}".strip() if current else block
+
+def split_blocks_recursively(
+    blocks: list[str],
+    page_number: int | None,
+    section_title: str,
+    max_chars: int,
+    overlap_chars: int,
+) -> list[ParsedChunk]:
+    pieces: list[str] = []
+    for block in blocks:
+        pieces.extend(split_oversized_block(block, max_chars=max_chars))
+    return pack_chunk_pieces(
+        pieces,
+        page_number=page_number,
+        section_title=section_title,
+        max_chars=max_chars,
+        overlap_chars=overlap_chars,
+    )
+
+
+def split_oversized_block(block: str, max_chars: int) -> list[str]:
+    block = block.strip()
+    if not block:
+        return []
+    if len(block) <= max_chars:
+        return [block]
+
+    lines = [line.strip() for line in block.splitlines() if line.strip()]
+    if len(lines) > 1:
+        line_pieces: list[str] = []
+        for line in lines:
+            line_pieces.extend(split_oversized_block(line, max_chars=max_chars))
+        return line_pieces
+
+    sentences = split_sentences(block)
+    if len(sentences) > 1:
+        return pack_text_units(sentences, max_chars=max_chars)
+
+    return split_by_chars(block, max_chars=max_chars)
+
+
+def split_sentences(text: str) -> list[str]:
+    sentence_pattern = r"[^。！？!?；;.\n]+[。！？!?；;.]?"
+    sentences = [match.group(0).strip() for match in re.finditer(sentence_pattern, text) if match.group(0).strip()]
+    return sentences or [text.strip()]
+
+
+def pack_text_units(units: list[str], max_chars: int) -> list[str]:
+    packed: list[str] = []
+    current = ""
+    for unit in units:
+        if len(unit) > max_chars:
+            if current:
+                packed.append(current.strip())
+                current = ""
+            packed.extend(split_by_chars(unit, max_chars=max_chars))
+            continue
+        candidate = join_sentence_units(current, unit) if current else unit
+        if current and len(candidate) > max_chars:
+            packed.append(current.strip())
+            current = unit
+        else:
+            current = candidate
+    if current:
+        packed.append(current.strip())
+    return packed
+
+
+def join_sentence_units(left: str, right: str) -> str:
+    if not left:
+        return right
+    separator = "" if left[-1] in "。！？；" else " "
+    return f"{left}{separator}{right}".strip()
+
+
+def split_by_chars(text: str, max_chars: int) -> list[str]:
+    return [text[index : index + max_chars].strip() for index in range(0, len(text), max_chars) if text[index : index + max_chars].strip()]
+
+
+def pack_chunk_pieces(
+    pieces: list[str],
+    page_number: int | None,
+    section_title: str,
+    max_chars: int,
+    overlap_chars: int,
+) -> list[ParsedChunk]:
+    chunks: list[ParsedChunk] = []
+    current = ""
+
+    for piece in pieces:
+        separator = "\n\n" if "\n" in piece or piece.startswith("#") else " "
+        candidate = f"{current}{separator}{piece}".strip() if current else piece
+        if current and len(candidate) > max_chars:
+            chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=section_title))
+            overlap = tail_overlap(current, overlap_chars)
+            current = f"{overlap}{separator}{piece}".strip() if overlap else piece
+            if len(current) > max_chars:
+                current = piece
+                if len(current) > max_chars:
+                    for part in split_by_chars(current, max_chars=max_chars):
+                        chunks.append(ParsedChunk(content=part.strip(), page_number=page_number, section_title=section_title))
+                    current = ""
+        else:
+            current = candidate
 
     if current:
-        chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=current_section))
+        chunks.append(ParsedChunk(content=current.strip(), page_number=page_number, section_title=section_title))
     return chunks
 
 
@@ -404,6 +527,26 @@ def extract_heading(block: str) -> str:
         if len(block.splitlines()) == 1 or first_line.endswith(("：", ":")):
             return first_line.strip("：:")[:120]
     return ""
+
+
+def extract_section_heading(block: str) -> str:
+    first_line = block.splitlines()[0].strip()
+    markdown_heading = re.match(r"^#{1,4}\s+(.+)$", first_line)
+    if markdown_heading:
+        return markdown_heading.group(1).strip()[:120]
+    if len(block.splitlines()) != 1 or len(first_line) > 80:
+        return ""
+    numbered_heading = re.match(r"^\d+(\.\d+)*[.、 ]+[\u4e00-\u9fffA-Za-z].+", first_line)
+    if numbered_heading:
+        return first_line.strip(":：")[:120]
+    if first_line.endswith((":","：")):
+        return first_line.strip(":：")[:120]
+    return ""
+
+
+def is_standalone_heading_block(block: str) -> bool:
+    first_line = block.splitlines()[0].strip() if block.splitlines() else ""
+    return len(block.splitlines()) == 1 and bool(re.match(r"^#{1,4}\s+.+$", first_line))
 
 
 def table_to_text(table) -> str:
