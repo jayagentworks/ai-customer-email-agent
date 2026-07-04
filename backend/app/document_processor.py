@@ -1,12 +1,14 @@
 import re
 import shutil
 import subprocess
+from hashlib import sha256
 from tempfile import TemporaryDirectory
 from dataclasses import dataclass
 from pathlib import Path
 
 
 SUPPORTED_KNOWLEDGE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".doc"}
+EXTRACTED_ASSETS_DIR = Path(__file__).resolve().parents[1] / "knowledge_docs" / "extracted_assets"
 
 
 @dataclass
@@ -35,6 +37,8 @@ class ParseReport:
     pages_with_text: int | None = None
     section_count: int = 0
     table_count: int = 0
+    image_count: int = 0
+    extracted_assets: list[dict] | None = None
     warnings: list[str] | None = None
 
     def to_dict(self) -> dict:
@@ -48,6 +52,8 @@ class ParseReport:
             "pages_with_text": self.pages_with_text,
             "section_count": self.section_count,
             "table_count": self.table_count,
+            "image_count": self.image_count,
+            "extracted_assets": self.extracted_assets or [],
             "warnings": self.warnings or [],
         }
 
@@ -103,6 +109,8 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
     pages_with_text = 0
     pages_with_ocr = 0
     warnings: list[str] = []
+    table_chunks, table_count = extract_pdf_table_chunks(path)
+    image_chunks, image_assets = extract_pdf_image_reference_chunks(path)
 
     for page_index, page in enumerate(reader.pages, start=1):
         raw_text = page.extract_text() or ""
@@ -128,6 +136,9 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
         if text_source == "ocr":
             warnings.append(f"Page {page_index} was parsed by local OCR.")
 
+    page_chunks.extend(table_chunks)
+    page_chunks.extend(image_chunks)
+
     if not page_chunks:
         raise ValueError("No extractable text found in this PDF. Local OCR also returned no reliable text.")
 
@@ -142,9 +153,132 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
         page_count=len(reader.pages),
         pages_with_text=pages_with_text,
         section_count=count_sections(page_chunks),
+        table_count=table_count,
+        image_count=len(image_assets),
+        extracted_assets=image_assets,
         warnings=warnings,
     )
     return ParsedDocument(title=extract_title(first_text, path.stem), chunks=page_chunks, report=report)
+
+
+def extract_pdf_table_chunks(path: Path) -> tuple[list[ParsedChunk], int]:
+    try:
+        import pdfplumber
+    except ImportError:
+        return [], 0
+
+    chunks: list[ParsedChunk] = []
+    table_count = 0
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            for page_index, page in enumerate(pdf.pages, start=1):
+                tables = page.extract_tables() or []
+                for table_index, table in enumerate(tables, start=1):
+                    table_text = pdf_table_to_markdown(table)
+                    if not table_text:
+                        continue
+                    table_count += 1
+                    title = f"PDF 表格 第 {page_index} 页 表 {table_index}"
+                    content = f"## {title}\n\n{table_text}"
+                    for chunk in split_markdown_like_text(content, page_number=page_index):
+                        chunk.section_title = title
+                        chunks.append(chunk)
+    except Exception:
+        return [], 0
+    return chunks, table_count
+
+
+def pdf_table_to_markdown(table: list[list[str | None]]) -> str:
+    rows = [[clean_table_cell(cell) for cell in row] for row in table if row]
+    rows = [row for row in rows if any(cell for cell in row)]
+    if not rows:
+        return ""
+
+    max_columns = max(len(row) for row in rows)
+    normalized_rows = [row + [""] * (max_columns - len(row)) for row in rows]
+    header = normalized_rows[0]
+    body = normalized_rows[1:] or [[""] * max_columns]
+    separator = ["---"] * max_columns
+    markdown_rows = [header, separator, *body]
+    return "\n".join("| " + " | ".join(row) + " |" for row in markdown_rows)
+
+
+def clean_table_cell(value: str | None) -> str:
+    text = clean_inline_text(value or "")
+    return text.replace("|", "\\|")
+
+
+def extract_pdf_image_reference_chunks(path: Path) -> tuple[list[ParsedChunk], list[dict]]:
+    try:
+        import fitz
+    except ImportError:
+        return [], []
+
+    chunks: list[ParsedChunk] = []
+    assets: list[dict] = []
+    try:
+        document = fitz.open(str(path))
+    except Exception:
+        return [], []
+
+    try:
+        for page_index, page in enumerate(document, start=1):
+            images = page.get_images(full=True)
+            for image_index, image in enumerate(images, start=1):
+                xref = image[0]
+                try:
+                    image_data = document.extract_image(xref)
+                except Exception:
+                    continue
+                image_bytes = image_data.get("image", b"")
+                if not image_bytes:
+                    continue
+                extension = normalize_image_extension(image_data.get("ext", "png"))
+                asset_path = save_extracted_pdf_image(path, page_index, image_index, extension, image_bytes)
+                relative_asset = asset_path.relative_to(EXTRACTED_ASSETS_DIR.parent).as_posix()
+                asset = {
+                    "type": "pdf_image",
+                    "path": relative_asset,
+                    "page_number": page_index,
+                    "image_index": image_index,
+                    "size_bytes": len(image_bytes),
+                }
+                assets.append(asset)
+                title = f"PDF 图片 第 {page_index} 页 图 {image_index}"
+                content = (
+                    f"## {title}\n\n"
+                    f"图片文件: {relative_asset}\n\n"
+                    "说明: 该 PDF 页面包含图片，系统已保存原始图片资产。"
+                    "当前文本 RAG 只索引此图片引用和页码，不会直接理解无文字图片内容。"
+                )
+                chunks.append(ParsedChunk(content=content, page_number=page_index, section_title=title))
+    finally:
+        document.close()
+
+    return chunks, assets
+
+
+def save_extracted_pdf_image(path: Path, page_number: int, image_index: int, extension: str, image_bytes: bytes) -> Path:
+    EXTRACTED_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    digest = sha256(image_bytes).hexdigest()[:12]
+    safe_stem = safe_asset_name(path.stem)
+    asset_name = f"{safe_stem}-p{page_number}-img{image_index}-{digest}.{extension}"
+    asset_path = EXTRACTED_ASSETS_DIR / asset_name
+    if not asset_path.exists():
+        asset_path.write_bytes(image_bytes)
+    return asset_path
+
+
+def safe_asset_name(value: str) -> str:
+    safe = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff._-]+", "-", value).strip("-._")
+    return safe[:80] or "pdf"
+
+
+def normalize_image_extension(value: str) -> str:
+    extension = re.sub(r"[^0-9A-Za-z]+", "", value.lower()) or "png"
+    if extension == "jpeg":
+        return "jpg"
+    return extension[:8]
 
 
 def ocr_pdf_page(path: Path, page_number: int) -> str:

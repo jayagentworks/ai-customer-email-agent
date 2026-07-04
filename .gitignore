@@ -17,3 +17,4 @@ frontend/dist/
 backend/app/__pycache__/
 backend/knowledge_docs/uploads/
 backend/knowledge_docs/restored/
+backend/knowledge_docs/extracted_assets/

@@ -113,6 +113,14 @@ text layer with `pypdf`; if a page has no extractable text, it renders that page
 with `pdftoppm` and runs local `tesseract` OCR with `chi_sim+eng`. This keeps
 normal text PDFs fast while still supporting scanned Chinese/English PDFs.
 
+PDF tables are extracted with `pdfplumber` and indexed as Markdown table chunks,
+so row/column relationships are preserved better than plain text extraction.
+Embedded PDF images are saved under `backend/knowledge_docs/extracted_assets/`
+and indexed as image-reference chunks with page numbers and file paths. The
+current text RAG can retrieve these references, but it does not semantically
+understand non-text images unless OCR text or a future multimodal image model is
+added.
+
 Start all services:
 
 ```powershell
