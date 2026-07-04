@@ -1,5 +1,5 @@
 import re
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -17,7 +17,16 @@ import time
 from app.models import AgentMetrics, EmailRecord, WorkflowStep
 
 
-class EmailWorkflowState(TypedDict):
+WorkflowRoute = Literal["relevant", "irrelevant"]
+
+
+class EmailWorkflowState(TypedDict, total=False):
+    """Mutable state passed between LangGraph nodes.
+
+    Nodes return partial updates. LangGraph merges those updates into the
+    current state, so each node only needs to return the fields it changed.
+    """
+
     email: EmailRecord
     use_llm: bool
 
@@ -213,13 +222,63 @@ def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
     return {"email": email}
 
 
-def route_after_relevance(state: EmailWorkflowState) -> str:
+def route_after_relevance(state: EmailWorkflowState) -> WorkflowRoute:
     return "irrelevant" if state["email"].status == "irrelevant" else "relevant"
 
 
 def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
     text = build_email_context(email).lower()
     sender = f"{email.customer_name} {email.customer_email}".lower()
+    platform_senders = {
+        "facebook", "facebookmail.com", "meta", "github", "google", "microsoft",
+        "notification", "notifications", "no-reply", "noreply", "donotreply",
+        "qq邮箱团队",
+    }
+    platform_notification_terms = {
+        "unsubscribe", "no-reply", "noreply", "notification", "notifications", "unread",
+        "new notification", "security alert", "login alert", "new login", "verification code",
+        "sudo email verification code", "email_forward_notice", "privacy", "newsletter",
+        "terms of service", "service terms", "privacy settings", "recommendation available",
+        "new recommendation", "default directory",
+        "oauth application", "third-party oauth", "first-party github oauth",
+        "authorized to access your account", "security events", "security-log",
+        "settings/security-log", "do not forward this email", "facebook.com",
+        "github.com/settings", "github.com/contact", "meta platforms",
+        "退订", "动态更新", "新通知", "条新通知", "查看通知", "通知中心",
+        "服务条款", "隐私设置", "更新后的", "推荐",
+        "登录提醒", "安全提醒", "验证码", "请勿转发", "如果不希望再收到", "了解详情",
+    }
+    direct_customer_request_terms = {
+        "please help", "can you help", "i need help", "we need help", "need help",
+        "please refund", "refund request", "invoice question", "billing issue",
+        "cannot log in", "can't log in", "unable to access", "failed to access",
+        "duplicate charge", "charged twice", "pro plan", "workspace issue",
+        "请问", "请帮", "帮我", "协助", "需要帮助", "无法", "不能", "失败",
+        "退款", "退费", "发票", "账单", "重复扣费", "重复收费", "套餐", "工作区",
+    }
+    security_notification_terms = {
+        "oauth application", "third-party oauth", "first-party github oauth",
+        "authorized to access your account", "security events", "security-log",
+        "settings/security-log", "verification code", "sudo email verification code",
+        "new login", "login alert", "security alert", "do not forward this email",
+    }
+
+    from_platform = any(term in sender for term in platform_senders)
+    has_notification_signal = any(term in text or term in sender for term in platform_notification_terms)
+    has_direct_customer_request = any(term in text for term in direct_customer_request_terms)
+    has_platform_security_signal = from_platform and any(term in text for term in security_notification_terms)
+    has_policy_update_signal = any(
+        term in text
+        for term in {"服务条款", "隐私设置", "terms of service", "privacy settings", "new recommendation", "recommendation available"}
+    )
+
+    if has_platform_security_signal:
+        return False, "Detected platform security notification without a customer support request."
+    if from_platform and has_policy_update_signal:
+        return False, "Detected platform policy, privacy, or recommendation notification without a customer support request."
+    if (from_platform or has_notification_signal) and not has_direct_customer_request:
+        return False, "Detected platform notification, security alert, newsletter, or unsubscribe-style email without a direct customer support request."
+
     support_terms = {
         "refund", "invoice", "billing", "charged", "duplicate", "login", "password", "access",
         "workspace", "cannot", "can't", "failed", "help", "support", "issue", "problem",
@@ -234,19 +293,8 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
         "退订", "动态更新", "新通知", "登录提醒", "安全提醒", "验证码", "请勿转发", "如果不希望再收到",
         "了解详情", "meta platforms", "facebook.com", "github", "google", "microsoft",
     }
-    security_notification_terms = {
-        "oauth application", "third-party oauth", "authorized to access your account",
-        "security events", "security-log", "settings/security-log", "verification code",
-        "new login", "login alert", "security alert", "do not forward this email",
-    }
-    platform_senders = {
-        "facebook", "meta", "github", "google", "microsoft", "qq邮箱团队", "notification", "no-reply", "noreply",
-    }
-
     has_support_intent = any(term in text for term in support_terms)
     has_notification_signal = any(term in text or term in sender for term in notification_terms | platform_senders)
-    from_platform = any(term in sender for term in platform_senders)
-    has_platform_security_signal = from_platform and any(term in text for term in security_notification_terms)
 
     if has_platform_security_signal:
         return False, "Detected platform security notification without a customer support request."
@@ -691,6 +739,7 @@ def review_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def build_email_workflow():
+    """Build the customer email Agent as a LangGraph StateGraph."""
     graph = StateGraph(EmailWorkflowState)
     graph.add_node("preprocess", preprocess_node)
     graph.add_node("semantic_analysis", semantic_analysis_node)
@@ -700,9 +749,9 @@ def build_email_workflow():
     graph.add_node("review", review_node)
 
     graph.add_edge(START, "preprocess")
-    graph.add_edge("preprocess", "semantic_analysis")
-    graph.add_edge("semantic_analysis", "relevance_gate")
-    graph.add_conditional_edges("relevance_gate", route_after_relevance, {"irrelevant": END, "relevant": "retrieve"})
+    graph.add_edge("preprocess", "relevance_gate")
+    graph.add_conditional_edges("relevance_gate", route_after_relevance, {"irrelevant": END, "relevant": "semantic_analysis"})
+    graph.add_edge("semantic_analysis", "retrieve")
     graph.add_edge("retrieve", "draft")
     graph.add_edge("draft", "review")
     graph.add_edge("review", END)
@@ -711,6 +760,32 @@ def build_email_workflow():
 
 
 email_workflow = build_email_workflow()
+
+
+def get_workflow_architecture() -> dict:
+    """Return a lightweight description for docs, debugging, or interviews."""
+    return {
+        "engine": "LangGraph StateGraph",
+        "state": ["email", "use_llm"],
+        "nodes": [
+            {"id": "preprocess", "role": "low-cost language, attachment, and risk-signal preprocessing"},
+            {"id": "relevance_gate", "role": "filter platform notifications and non-support emails before LLM/RAG"},
+            {"id": "semantic_analysis", "role": "LLM-first category, confidence, and risk analysis with rule fallback"},
+            {"id": "retrieve", "role": "hybrid RAG retrieval over the knowledge base"},
+            {"id": "draft", "role": "LLM-first customer reply drafting with structured fallback"},
+            {"id": "review", "role": "human-in-the-loop routing and one-click-send decision"},
+        ],
+        "edges": [
+            ("START", "preprocess"),
+            ("preprocess", "relevance_gate"),
+            ("relevance_gate", "END", "irrelevant"),
+            ("relevance_gate", "semantic_analysis", "relevant"),
+            ("semantic_analysis", "retrieve"),
+            ("retrieve", "draft"),
+            ("draft", "review"),
+            ("review", "END"),
+        ],
+    }
 
 
 def contains_chinese(text: str) -> bool:

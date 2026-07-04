@@ -1,14 +1,15 @@
 import hashlib
+import json
 import re
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text as sql_text
 from sqlalchemy.orm import selectinload
 
-from app.db import SessionLocal, init_db
+from app.db import SessionLocal, engine, init_db
 from app.db_models import KnowledgeChunkORM, KnowledgeDocumentORM, KnowledgeDocumentVersionORM, OperationLogORM
 from app.document_processor import SUPPORTED_KNOWLEDGE_SUFFIXES, parse_document
 from app.embedding_client import cosine_similarity, embed_text, embed_texts
@@ -438,11 +439,17 @@ def delete_knowledge_document(document_id: str) -> None:
 def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -> list[KnowledgeHit]:
     init_db()
     ensure_default_documents()
+    backfill_pgvector_embeddings()
     query_embedding, _ = embed_text(build_query(text, category))
+    candidate_ids = pgvector_candidate_ids(query_embedding, category, limit)
 
     with SessionLocal() as session:
         statement = select(KnowledgeChunkORM).join(KnowledgeDocumentORM).where(KnowledgeDocumentORM.status == "indexed")
-        if category and category != "other":
+        if candidate_ids:
+            candidate_rows = session.scalars(statement.where(KnowledgeChunkORM.id.in_(candidate_ids))).all()
+            row_by_id = {row.id: row for row in candidate_rows}
+            rows = [row_by_id[row_id] for row_id in candidate_ids if row_id in row_by_id]
+        elif category and category != "other":
             category_rows = session.scalars(statement.where(KnowledgeChunkORM.category == category)).all()
             rows = category_rows or session.scalars(statement).all()
         else:
@@ -481,6 +488,99 @@ def search_knowledge(query: str, category: str | None = None, limit: int = 5) ->
     return retrieve_knowledge(query, category=category, limit=limit)
 
 
+def pgvector_enabled() -> bool:
+    return engine.dialect.name == "postgresql"
+
+
+def vector_literal(vector: list[float]) -> str:
+    return json.dumps([round(float(value), 6) for value in vector], separators=(",", ":"))
+
+
+def pgvector_candidate_ids(query_embedding: list[float], category: str | None, limit: int) -> list[str]:
+    if not pgvector_enabled() or not query_embedding:
+        return []
+
+    candidate_limit = max(limit * 8, 24)
+    base_sql = """
+        SELECT knowledge_chunks.id
+        FROM knowledge_chunks
+        JOIN knowledge_documents ON knowledge_documents.id = knowledge_chunks.document_id
+        WHERE knowledge_documents.status = 'indexed'
+          AND knowledge_chunks.embedding_vector IS NOT NULL
+          AND vector_dims(knowledge_chunks.embedding_vector) = :dimensions
+    """
+    params = {
+        "query_embedding": vector_literal(query_embedding),
+        "dimensions": len(query_embedding),
+        "limit": candidate_limit,
+    }
+    if category and category != "other":
+        base_sql += " AND knowledge_chunks.category = :category"
+        params["category"] = category
+    base_sql += """
+        ORDER BY knowledge_chunks.embedding_vector <=> CAST(:query_embedding AS vector)
+        LIMIT :limit
+    """
+
+    try:
+        with engine.connect() as connection:
+            return [row[0] for row in connection.execute(sql_text(base_sql), params).all()]
+    except Exception:
+        return []
+
+
+def sync_pgvector_embeddings(chunk_vectors: list[tuple[str, list[float]]]) -> None:
+    if not pgvector_enabled() or not chunk_vectors:
+        return
+
+    try:
+        with engine.begin() as connection:
+            for chunk_id, embedding in chunk_vectors:
+                if not chunk_id or not embedding:
+                    continue
+                connection.execute(
+                    sql_text(
+                        "UPDATE knowledge_chunks "
+                        "SET embedding_vector = CAST(:embedding AS vector) "
+                        "WHERE id = :chunk_id"
+                    ),
+                    {"embedding": vector_literal(embedding), "chunk_id": chunk_id},
+                )
+    except Exception:
+        # Keep JSON embeddings as the source of truth if pgvector is not
+        # available for this database instance.
+        return
+
+
+def backfill_pgvector_embeddings(limit: int = 1000) -> None:
+    if not pgvector_enabled():
+        return
+
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                sql_text(
+                    "SELECT id, embedding FROM knowledge_chunks "
+                    "WHERE embedding_vector IS NULL AND embedding IS NOT NULL "
+                    "LIMIT :limit"
+                ),
+                {"limit": limit},
+            ).all()
+    except Exception:
+        return
+
+    chunk_vectors: list[tuple[str, list[float]]] = []
+    for chunk_id, embedding in rows:
+        if isinstance(embedding, str):
+            try:
+                embedding = json.loads(embedding)
+            except json.JSONDecodeError:
+                embedding = []
+        if isinstance(embedding, list) and embedding:
+            chunk_vectors.append((chunk_id, embedding))
+    sync_pgvector_embeddings(chunk_vectors)
+
+
 def upsert_document(
     path: Path,
     document_id: str | None = None,
@@ -517,22 +617,25 @@ def upsert_document(
         session.execute(delete(KnowledgeChunkORM).where(KnowledgeChunkORM.document_id == row.id))
         session.flush()
 
+        pending_chunks: list[tuple[KnowledgeChunkORM, list[float]]] = []
         for index, (chunk, embedding) in enumerate(zip(parsed.chunks, embeddings)):
-            session.add(
-                KnowledgeChunkORM(
-                    document_id=row.id,
-                    position=index,
-                    title=title,
-                    source=f"{source}#chunk-{index + 1}",
-                    category=infer_category(f"{title}\n{chunk.content}", source=source),
-                    content=chunk.content,
-                    token_estimate=estimate_tokens(chunk.content),
-                    page_number=chunk.page_number,
-                    section_title=chunk.section_title,
-                    embedding_model=embedding_model,
-                    embedding=embedding,
-                )
+            chunk_row = KnowledgeChunkORM(
+                document_id=row.id,
+                position=index,
+                title=title,
+                source=f"{source}#chunk-{index + 1}",
+                category=infer_category(f"{title}\n{chunk.content}", source=source),
+                content=chunk.content,
+                token_estimate=estimate_tokens(chunk.content),
+                page_number=chunk.page_number,
+                section_title=chunk.section_title,
+                embedding_model=embedding_model,
+                embedding=embedding,
             )
+            session.add(chunk_row)
+            pending_chunks.append((chunk_row, embedding))
+        session.flush()
+        pending_vectors = [(chunk_row.id, embedding) for chunk_row, embedding in pending_chunks]
         if create_version:
             create_document_version(
                 session=session,
@@ -542,6 +645,7 @@ def upsert_document(
                 note=version_note,
             )
         session.commit()
+        sync_pgvector_embeddings(pending_vectors)
         session.refresh(row)
         return build_document_model(row, len(parsed.chunks))
 

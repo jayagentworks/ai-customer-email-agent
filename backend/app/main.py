@@ -134,6 +134,8 @@ def regenerate_email_draft(email_id: str) -> EmailRecord:
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
+    if email.status in {"new", "irrelevant"} or not email.category or email.category == "other":
+        raise HTTPException(status_code=400, detail="Email must be processed as a customer support request before regenerating a draft")
 
     saved = store.save(regenerate_draft_reply(email))
     record_operation_log(
@@ -153,7 +155,8 @@ def regenerate_email_draft(email_id: str) -> EmailRecord:
 @app.post("/mail/qq/import")
 def import_qq_mail(background_tasks: BackgroundTasks, limit: int = Query(default=10, ge=1, le=50)) -> dict:
     try:
-        imported = fetch_unread_qq_emails(limit=limit)
+        known_message_ids = store.list_provider_message_ids("qq", limit=300)
+        imported = fetch_unread_qq_emails(limit=limit, known_message_ids=known_message_ids)
     except MailClientConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

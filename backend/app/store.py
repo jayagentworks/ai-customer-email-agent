@@ -55,6 +55,16 @@ class EmailStore:
                 > 0
             )
 
+    def list_provider_message_ids(self, provider: str, limit: int = 200) -> set[str]:
+        with SessionLocal() as session:
+            rows = session.scalars(
+                select(EmailORM.provider_message_id)
+                .where(EmailORM.provider == provider)
+                .order_by(EmailORM.created_at.desc())
+                .limit(limit)
+            ).all()
+            return {value for value in rows if value}
+
     def save(self, email: EmailRecord) -> EmailRecord:
         with SessionLocal() as session:
             saved = self._save(session, email)

@@ -1,5 +1,7 @@
 import imaplib
+import html
 import os
+import re
 import smtplib
 from dataclasses import dataclass
 from tempfile import TemporaryDirectory
@@ -30,22 +32,28 @@ class ImportedMail:
     provider_message_id: str
 
 
-def fetch_unread_qq_emails(limit: int = 5) -> list[ImportedMail]:
+def fetch_unread_qq_emails(limit: int = 5, known_message_ids: set[str] | None = None) -> list[ImportedMail]:
     address = required_env("QQ_EMAIL_ADDRESS")
     auth_code = required_env("QQ_EMAIL_AUTH_CODE")
     host = os.getenv("QQ_IMAP_HOST", "imap.qq.com")
     port = int(os.getenv("QQ_IMAP_PORT", "993"))
+    timeout = float(os.getenv("QQ_IMAP_TIMEOUT_SECONDS", "20"))
+    search_criteria = os.getenv("QQ_IMAP_SEARCH_CRITERIA", "ALL")
 
-    with imaplib.IMAP4_SSL(host, port) as client:
+    with imaplib.IMAP4_SSL(host, port, timeout=timeout) as client:
         client.login(address, auth_code)
         client.select("INBOX")
-        status, data = client.search(None, "UNSEEN")
+        status, data = client.search(None, search_criteria)
         if status != "OK":
             return []
 
         ids = data[0].split()[-limit:]
         imported: list[ImportedMail] = []
         for mail_id in reversed(ids):
+            provider_message_id = fetch_provider_message_id(client, mail_id)
+            if provider_message_id and known_message_ids and provider_message_id in known_message_ids:
+                continue
+
             fetch_status, fetch_data = client.fetch(mail_id, "(BODY.PEEK[])")
             if fetch_status != "OK" or not fetch_data:
                 continue
@@ -59,20 +67,34 @@ def fetch_unread_qq_emails(limit: int = 5) -> list[ImportedMail]:
 
             message = message_from_bytes(raw_message)
             sender_name, sender_email = parseaddr(decode_mime_text(message.get("From", "")))
+            body = extract_plain_text(message)
+            if len(body.strip()) < 10:
+                body = "(empty email body)"
             imported.append(
                 ImportedMail(
                     payload=EmailCreate(
                         customer_name=sender_name or sender_email or "QQ Mail User",
                         customer_email=sender_email,
                         subject=decode_mime_text(message.get("Subject", "(no subject)")),
-                        body=extract_plain_text(message),
+                        body=body,
                         attachments=extract_attachments(message),
                     ),
-                    provider_message_id=message.get("Message-ID", mail_id.decode("utf-8", errors="ignore")),
+                    provider_message_id=provider_message_id or message.get("Message-ID", mail_id.decode("utf-8", errors="ignore")),
                 )
             )
 
         return imported
+
+
+def fetch_provider_message_id(client: imaplib.IMAP4_SSL, mail_id: bytes) -> str:
+    status, data = client.fetch(mail_id, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+    if status != "OK" or not data:
+        return mail_id.decode("utf-8", errors="ignore")
+    raw_header = next((part[1] for part in data if isinstance(part, tuple) and len(part) >= 2), b"")
+    if not raw_header:
+        return mail_id.decode("utf-8", errors="ignore")
+    message = message_from_bytes(raw_header)
+    return message.get("Message-ID", mail_id.decode("utf-8", errors="ignore"))
 
 
 def send_qq_email(*, to_address: str, subject: str, body: str) -> None:
@@ -105,7 +127,7 @@ def decode_mime_text(value: str) -> str:
             fragments.append(decode_bytes(payload, charset))
         else:
             fragments.append(payload)
-    return "".join(fragments).strip()
+    return repair_mojibake_text("".join(fragments).strip())
 
 
 def extract_plain_text(message: Message) -> str:
@@ -116,13 +138,31 @@ def extract_plain_text(message: Message) -> str:
             if content_type == "text/plain" and disposition != "attachment":
                 payload = part.get_payload(decode=True)
                 if payload:
-                    return decode_bytes(payload, part.get_content_charset()).strip()
+                    text = clean_email_text(repair_mojibake_text(decode_bytes(payload, part.get_content_charset()).strip()))
+                    if text:
+                        return text
     else:
         payload = message.get_payload(decode=True)
         if payload:
-            return decode_bytes(payload, message.get_content_charset()).strip()
+            text = clean_email_text(repair_mojibake_text(decode_bytes(payload, message.get_content_charset()).strip()))
+            if text:
+                return text
 
     return "(empty email body)"
+
+
+def clean_email_text(text: str) -> str:
+    if not text:
+        return text
+    cleaned = html.unescape(text)
+    cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = re.sub(r"(?i)<br\s*/?>", "\n", cleaned)
+    cleaned = re.sub(r"(?i)</p\s*>", "\n", cleaned)
+    cleaned = re.sub(r"(?i)<li\s*>", "\n- ", cleaned)
+    cleaned = re.sub(r"<[^>]+>", "", cleaned)
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 def decode_bytes(payload: bytes, charset: str | None = None) -> str:
@@ -141,6 +181,39 @@ def decode_bytes(payload: bytes, charset: str | None = None) -> str:
     if best_text:
         return best_text
     return payload.decode("utf-8", errors="ignore")
+
+
+def repair_mojibake_text(text: str) -> str:
+    if not text:
+        return text
+    best_text = text
+    best_score = score_decoded_text(text) - mojibake_score(text) * 30 - utf16_ascii_pair_score(text) * 80
+    for source_encoding in ("utf-16le", "gb18030", "gbk", "latin-1"):
+        try:
+            candidate = text.encode(source_encoding).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        score = score_decoded_text(candidate) - mojibake_score(candidate) * 30 - utf16_ascii_pair_score(candidate) * 80
+        if score > best_score + 10:
+            best_text = candidate
+            best_score = score
+    return best_text
+
+
+def mojibake_score(text: str) -> int:
+    markers = "锟鏁鏂鎬浣犳煡鐪嬶細鏉℃柊閫氱煡鏈夊姩洿扮瓑"
+    return sum(text.count(marker) for marker in markers)
+
+
+def utf16_ascii_pair_score(text: str) -> int:
+    suspicious = 0
+    for char in text:
+        code = ord(char)
+        low = code & 0xFF
+        high = code >> 8
+        if 32 <= low <= 126 and 32 <= high <= 126:
+            suspicious += 1
+    return suspicious
 
 
 def normalize_charset_candidates(charset: str | None) -> list[str]:
@@ -163,9 +236,11 @@ def score_decoded_text(text: str) -> int:
         return -100
     replacement_penalty = text.count("�") * 20 + text.count("\x00") * 10
     question_run_penalty = text.count("????") * 10
+    utf16_pair_penalty = utf16_ascii_pair_score(text) * 80
     chinese_bonus = sum(1 for char in text if "\u4e00" <= char <= "\u9fff") * 2
     readable_bonus = sum(1 for char in text if char.isprintable() or char in "\r\n\t")
-    return readable_bonus + chinese_bonus - replacement_penalty - question_run_penalty
+    ascii_bonus = sum(1 for char in text if char.isascii() and (char.isalnum() or char in " .,;:/-_@<>")) * 2
+    return readable_bonus + chinese_bonus + ascii_bonus - replacement_penalty - question_run_penalty - utf16_pair_penalty
 
 
 def extract_attachments(message: Message) -> list[EmailAttachment]:
@@ -187,6 +262,7 @@ def extract_attachments(message: Message) -> list[EmailAttachment]:
 
 
 def build_attachment(filename: str, content_type: str, payload: bytes, part: Message) -> EmailAttachment:
+    filename = repair_mojibake_text(filename)
     preview, parse_status, status_message, parse_report = parse_attachment_payload(filename, content_type, payload, part)
     return EmailAttachment(
         filename=filename,

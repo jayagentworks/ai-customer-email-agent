@@ -8,10 +8,10 @@ This is a portfolio-oriented full-stack agent project focused on practical custo
 
 - Real QQ mailbox integration through IMAP and SMTP.
 - Asynchronous email import so the UI does not block while the Agent processes messages.
-- LangGraph-style agent workflow:
+- LangGraph `StateGraph` agent workflow:
   - preprocessing
-  - semantic classification
   - non-support email filtering
+  - semantic classification
   - RAG retrieval
   - reply drafting
   - review decision
@@ -23,7 +23,7 @@ This is a portfolio-oriented full-stack agent project focused on practical custo
   - version history
   - rollback and deletion
   - strong and weak duplicate detection
-- Hybrid RAG retrieval with semantic, keyword, and category scores.
+- Hybrid RAG retrieval with pgvector semantic recall, keyword scoring, and category reranking.
 - Chinese-first enterprise dashboard with optional English mode.
 - Agent observability:
   - workflow trace
@@ -49,10 +49,12 @@ This is a portfolio-oriented full-stack agent project focused on practical custo
 flowchart LR
   QQ[QQ Mail] --> API[FastAPI backend]
   API --> DB[(PostgreSQL)]
-  API --> Agent[Email Agent workflow]
-  Agent --> Gate[Relevance gate]
-  Gate -->|support email| RAG[RAG retrieval]
+  API --> Agent[LangGraph StateGraph]
+  Agent --> Preprocess[Preprocess]
+  Preprocess --> Gate[Relevance gate]
   Gate -->|non-support email| Filtered[No reply generated]
+  Gate -->|support email| Semantic[Semantic analysis]
+  Semantic --> RAG[RAG retrieval]
   RAG --> Draft[Reply draft]
   Draft --> Review[Human review]
   Review --> SMTP[QQ SMTP send]
@@ -68,7 +70,7 @@ More details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Agent workflow: LangGraph StateGraph
 - Frontend: React, TypeScript, Vite
 - Mail: QQ IMAP/SMTP
-- RAG: hybrid semantic + keyword + category retrieval
+- RAG: PostgreSQL + pgvector semantic recall, keyword scoring, category reranking
 - Document parsing: PDF, DOCX, DOC, text-like files
 - LLM/Embedding: OpenAI-compatible API, configured for SiliconFlow by default
 
@@ -134,6 +136,16 @@ Important variables:
 - `DATABASE_URL`: SQLAlchemy database URL.
 
 When API keys are missing, the system falls back to local rule-based classification and local hash embeddings.
+
+For PostgreSQL deployments, enable pgvector in the target database:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+The app stores embeddings in both JSON form and an optional `embedding_vector`
+pgvector column. If pgvector is unavailable, retrieval falls back to Python
+cosine similarity over the JSON embeddings.
 
 ## Validation
 

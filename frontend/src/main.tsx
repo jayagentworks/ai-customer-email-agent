@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -364,6 +364,20 @@ function formatCount(value?: number | null) {
   return typeof value === "number" ? value.toLocaleString("zh-CN") : "-";
 }
 
+function formatLatency(value: number) {
+  if (!value) return "0 ms";
+  if (value >= 10_000) return `${(value / 1000).toFixed(1)} s`;
+  if (value >= 1000) return `${(value / 1000).toFixed(2)} s`;
+  return `${value} ms`;
+}
+
+function formatCost(value: number) {
+  if (!value) return "¥0";
+  if (value < 0.000001) return "<¥0.000001";
+  if (value < 0.01) return `¥${value.toFixed(6)}`;
+  return `¥${value.toFixed(4)}`;
+}
+
 function normalizeUploadError(detail: unknown) {
   if (typeof detail === "string") return { kind: "upload_error", message: detail };
   if (detail && typeof detail === "object") {
@@ -416,9 +430,13 @@ function App() {
     subject: sampleBodies[0].subject,
     body: sampleBodies[0].body,
   });
+  const syncingRef = useRef(false);
+  const selectedIdRef = useRef("");
 
   const t = copy[locale];
-  const selected = useMemo(() => emails.find((email) => email.id === selectedId) ?? emails[0], [emails, selectedId]);
+  const inboxEmails = emails.filter((email) => email.status !== "irrelevant");
+  const irrelevantEmails = emails.filter((email) => email.status === "irrelevant");
+  const selected = useMemo(() => emails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? emails[0], [emails, inboxEmails, selectedId]);
   const reviewEmails = emails.filter((email) => {
     if (["irrelevant", "sent", "processed", "ready_to_send"].includes(email.status)) return false;
     return ["human_review", "needs_revision", "escalated"].includes(email.status) || email.priority === "high";
@@ -430,11 +448,18 @@ function App() {
   const processedCount = emails.filter((email) => email.status === "processed" || email.status === "ready_to_send").length;
   const pageMeta = getPageMeta(activeView, t);
 
-  async function loadEmails() {
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  async function loadEmails(options: { selectFirstIfEmpty?: boolean } = {}) {
     const response = await fetch(`${API_URL}/emails`);
     const data = (await response.json()) as EmailRecord[];
     setEmails(data);
-    if (!selectedId && data.length > 0) setSelectedId(data[0].id);
+    if (options.selectFirstIfEmpty && !selectedIdRef.current && data.length > 0) {
+      selectedIdRef.current = data[0].id;
+      setSelectedId(data[0].id);
+    }
   }
 
   async function loadKnowledgeDocuments() {
@@ -661,27 +686,31 @@ function App() {
     }
   }
 
-  async function syncQQMail() {
-    setSyncing(true);
+  async function syncQQMail(options: { silent?: boolean } = {}) {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (!options.silent) setSyncing(true);
     try {
-      const response = await fetch(`${API_URL}/mail/qq/import?limit=10`, { method: "POST" });
+      const response = await fetch(`${API_URL}/mail/qq/import?limit=5`, { method: "POST" });
+      if (!response.ok) return;
       const result = (await response.json()) as { queued_count?: number; skipped_count?: number; emails?: EmailRecord[] };
       const imported = result.emails || [];
       await loadEmails();
       await loadOperationLogs();
-      if (imported.length > 0) setSelectedId(imported[0].id);
-      if ((result.queued_count || 0) > 0) pollMailProcessing();
+      if (!options.silent && imported.length > 0) setSelectedId(imported[0].id);
+      if ((result.queued_count || 0) > 0) pollMailProcessing(0, options.silent);
     } finally {
-      setSyncing(false);
+      syncingRef.current = false;
+      if (!options.silent) setSyncing(false);
     }
   }
 
-  function pollMailProcessing(round = 0) {
-    if (round >= 8) return;
+  function pollMailProcessing(round = 0, silent = false) {
+    if (round >= 20) return;
     window.setTimeout(async () => {
       await Promise.all([loadEmails(), loadOperationLogs()]);
-      pollMailProcessing(round + 1);
-    }, 1500);
+      pollMailProcessing(round + 1, silent);
+    }, silent ? 3000 : 1500);
   }
 
   async function sendReply(emailId: string) {
@@ -794,9 +823,22 @@ function App() {
   }
 
   useEffect(() => {
-    loadEmails();
+    loadEmails({ selectFirstIfEmpty: true });
     loadKnowledgeDocuments();
     loadOperationLogs();
+  }, []);
+
+  useEffect(() => {
+    const syncWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      syncQQMail({ silent: true });
+    };
+    const timer = window.setInterval(syncWhenVisible, 20_000);
+    const initialTimer = window.setTimeout(syncWhenVisible, 2_000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(initialTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -847,7 +889,19 @@ function App() {
             <div className="layout inboxLayout">
               <div className="moduleStack inboxStack">
                 <Composer t={t} form={form} setForm={setForm} loading={loading} syncing={syncing} loadEmails={loadEmails} syncQQMail={syncQQMail} processEmail={processEmail} />
-                <EmailQueue title={t.inboxQueue} hint={t.inboxQueueHint} emails={emails} selectedId={selected?.id} locale={locale} setSelectedId={setSelectedId} />
+                <EmailQueue
+                  title={t.inboxQueue}
+                  hint={t.inboxQueueHint}
+                  emails={inboxEmails}
+                  selectedId={selected?.id}
+                  locale={locale}
+                  setSelectedId={setSelectedId}
+                  primaryTitle={locale === "zh" ? "客服邮件" : "Support emails"}
+                  primaryHint={locale === "zh" ? "需要进入客服处理流程的邮件。" : "Emails that should enter the support workflow."}
+                  secondaryTitle={locale === "zh" ? "非客服邮件复核" : "Non-support review"}
+                  secondaryHint={locale === "zh" ? "系统已过滤，可快速确认是否误判。" : "Filtered by the gate. Check for false negatives."}
+                  secondaryEmails={irrelevantEmails}
+                />
               </div>
               {selected && <EmailDetail selected={selected} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} />}
             </div>
@@ -1183,14 +1237,14 @@ function AgentCostPanel({ metrics, locale }: { metrics: AgentMetrics; locale: Lo
     ? [
         ["Token", `${totalTokens}`],
         ["LLM 总数", `${metrics.llm_calls}`],
-        ["RAG 耗时", `${metrics.rag_latency_ms} ms`],
-        ["单次成本", `¥${metrics.estimated_cost_cny.toFixed(6)}`],
+        ["RAG 耗时", formatLatency(metrics.rag_latency_ms)],
+        ["单次成本", formatCost(metrics.estimated_cost_cny)],
       ]
     : [
         ["Tokens", `${totalTokens}`],
         ["LLM total", `${metrics.llm_calls}`],
-        ["RAG latency", `${metrics.rag_latency_ms} ms`],
-        ["Run cost", `¥${metrics.estimated_cost_cny.toFixed(6)}`],
+        ["RAG latency", formatLatency(metrics.rag_latency_ms)],
+        ["Run cost", formatCost(metrics.estimated_cost_cny)],
       ];
   return (
     <section className="costPanel">
@@ -1202,7 +1256,7 @@ function AgentCostPanel({ metrics, locale }: { metrics: AgentMetrics; locale: Lo
         {items.map(([label, value]) => (
           <div className="costMetric" key={label}>
             <span>{label}</span>
-            <strong className={label.includes("成本") || label.includes("cost") ? "costValue" : ""}>{value}</strong>
+            <strong className={label.includes("成本") || label.includes("cost") || label.includes("RAG") ? "costValue" : ""} title={value}>{value}</strong>
           </div>
         ))}
       </div>
@@ -1377,20 +1431,70 @@ function Composer({ t, form, setForm, loading, syncing, loadEmails, syncQQMail, 
   );
 }
 
-function EmailQueue({ title, hint, emails, selectedId, locale, setSelectedId }: { title: string; hint: string; emails: EmailRecord[]; selectedId?: string; locale: Locale; setSelectedId: (id: string) => void }) {
+function EmailQueue({
+  title,
+  hint,
+  emails,
+  selectedId,
+  locale,
+  setSelectedId,
+  primaryTitle,
+  primaryHint,
+  secondaryTitle,
+  secondaryHint,
+  secondaryEmails = [],
+}: {
+  title: string;
+  hint: string;
+  emails: EmailRecord[];
+  selectedId?: string;
+  locale: Locale;
+  setSelectedId: (id: string) => void;
+  primaryTitle?: string;
+  primaryHint?: string;
+  secondaryTitle?: string;
+  secondaryHint?: string;
+  secondaryEmails?: EmailRecord[];
+}) {
+  const [openQueueSection, setOpenQueueSection] = useState<"primary" | "secondary">("primary");
+  const renderEmailItem = (email: EmailRecord) => (
+    <button key={email.id} className={`emailItem ${selectedId === email.id ? "active" : ""}`} onClick={() => setSelectedId(email.id)}>
+      <span className={`priority ${email.priority}`}>{priorityLabels[locale][email.priority]}</span>
+      <strong>{formatEmailSubject(email.subject, locale)}</strong>
+      <span>{email.customer_name}</span>
+      <small>{statusLabels[locale][email.status]}</small>
+    </button>
+  );
+
   return (
     <div className="queuePane">
       <div className="queueHeader"><div><h3>{title}</h3><span>{hint}</span></div><BarChart3 size={18} /></div>
-      <div className="emailList">
-        {emails.map((email) => (
-          <button key={email.id} className={`emailItem ${selectedId === email.id ? "active" : ""}`} onClick={() => setSelectedId(email.id)}>
-            <span className={`priority ${email.priority}`}>{priorityLabels[locale][email.priority]}</span>
-            <strong>{formatEmailSubject(email.subject, locale)}</strong>
-            <span>{email.customer_name}</span>
-            <small>{statusLabels[locale][email.status]}</small>
+      <section className={`queueSection ${openQueueSection === "primary" ? "open" : ""}`}>
+        <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "primary" ? "secondary" : "primary")}>
+          <div><strong>{primaryTitle || title}</strong>{primaryHint && <span>{primaryHint}</span>}</div>
+          <small>{emails.length}</small>
+        </button>
+        {openQueueSection === "primary" && (
+          <div className="emailList queueSectionList">
+            {emails.map(renderEmailItem)}
+            {emails.length === 0 && <div className="queueEmpty">{locale === "zh" ? "暂无客服邮件" : "No support emails"}</div>}
+          </div>
+        )}
+      </section>
+      {secondaryTitle && (
+        <section className={`queueSection secondaryQueueSection ${openQueueSection === "secondary" ? "open" : ""}`}>
+          <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "secondary" ? "primary" : "secondary")}>
+            <div><strong>{secondaryTitle}</strong>{secondaryHint && <span>{secondaryHint}</span>}</div>
+            <small>{secondaryEmails.length}</small>
           </button>
-        ))}
-      </div>
+          {openQueueSection === "secondary" && (
+            <div className="emailList queueSectionList secondaryEmailList">
+              {secondaryEmails.map(renderEmailItem)}
+              {secondaryEmails.length === 0 && <div className="queueEmpty">{locale === "zh" ? "暂无非客服邮件" : "No non-support emails"}</div>}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
@@ -1427,6 +1531,7 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
 
   useEffect(() => {
     if (selected.status === "irrelevant") return;
+    if (selected.status === "new" || !selected.category || selected.category === "other") return;
     if (safeEditableText(selected.draft_reply).trim() || isGeneratingReply) return;
     regenerateReply(selected.id);
   }, [selected.id, selected.status, selected.draft_reply, isGeneratingReply, regenerateReply]);
@@ -1712,7 +1817,20 @@ function isCorruptedText(value?: string) {
   if (!text) return false;
   const questionCount = (text.match(/\?/g) || []).length;
   const repeatedQuestionRuns = (text.match(/\?{4,}/g) || []).length;
-  return text === "�" || /^[?\s]+$/.test(text) || repeatedQuestionRuns > 0 || questionCount / text.length > 0.25 || text.includes("�");
+  return (
+    text === "�"
+    || /^[?\s]+$/.test(text)
+    || repeatedQuestionRuns > 0
+    || questionCount / text.length > 0.25
+    || text.includes("�")
+    || isMojibakeText(text)
+  );
+}
+
+function isMojibakeText(text: string) {
+  const markers = ["鏈", "鎬", "浣", "鏂", "鐪", "嬶", "細", "鏉", "閫", "氱", "煡"];
+  const hits = markers.filter((marker) => text.includes(marker)).length;
+  return hits >= 3;
 }
 
 function stripInternalReferenceLines(value: string) {
