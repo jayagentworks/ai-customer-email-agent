@@ -441,6 +441,7 @@ def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -
     ensure_default_documents()
     backfill_pgvector_embeddings()
     query_embedding, _ = embed_text(build_query(text, category))
+    normalize_embedding_dimensions(len(query_embedding))
     candidate_ids = pgvector_candidate_ids(query_embedding, category, limit)
 
     with SessionLocal() as session:
@@ -457,11 +458,14 @@ def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -
 
     scored: list[tuple[float, KnowledgeChunkORM, float, float, float, str]] = []
     query_terms = extract_terms(text)
+    category_terms = category_keyword_terms(category)
     for row in rows:
         vector_score = cosine_similarity(query_embedding, row.embedding or [])
-        keyword_score = keyword_overlap(query_terms, row.content)
+        keyword_score = keyword_overlap(query_terms | category_terms, row.content)
         category_score = 1.0 if category and row.category == category else 0.0
-        score = max(0.0, min(0.99, vector_score * 0.55 + keyword_score * 0.35 + category_score * 0.10))
+        score = max(0.0, min(0.99, vector_score * 0.55 + keyword_score * 0.30 + category_score * 0.15))
+        if category_score > 0 and (keyword_score > 0 or vector_score > 0):
+            score = max(score, 0.24)
         if score >= 0.18:
             scored.append((score, row, vector_score, keyword_score, category_score, build_match_reason(vector_score, keyword_score, category_score)))
 
@@ -486,6 +490,50 @@ def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -
 
 def search_knowledge(query: str, category: str | None = None, limit: int = 5) -> list[KnowledgeHit]:
     return retrieve_knowledge(query, category=category, limit=limit)
+
+
+def normalize_embedding_dimensions(expected_dimensions: int, limit: int = 100) -> None:
+    if expected_dimensions <= 0:
+        return
+
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(KnowledgeChunkORM)
+            .join(KnowledgeDocumentORM)
+            .where(KnowledgeDocumentORM.status == "indexed")
+            .limit(limit)
+        ).all()
+
+    mismatched = [row for row in rows if embedding_dimensions(row.embedding) != expected_dimensions]
+    if not mismatched:
+        return
+
+    texts = [row.content for row in mismatched]
+    embeddings, embedding_model = embed_texts(texts)
+    chunk_vectors: list[tuple[str, list[float]]] = []
+    with SessionLocal() as session:
+        for row, embedding in zip(mismatched, embeddings):
+            if len(embedding) != expected_dimensions:
+                continue
+            db_row = session.get(KnowledgeChunkORM, row.id)
+            if not db_row:
+                continue
+            db_row.embedding = embedding
+            db_row.embedding_model = embedding_model
+            chunk_vectors.append((row.id, embedding))
+        session.commit()
+    sync_pgvector_embeddings(chunk_vectors)
+
+
+def embedding_dimensions(embedding: object) -> int:
+    if isinstance(embedding, str):
+        try:
+            embedding = json.loads(embedding)
+        except json.JSONDecodeError:
+            return 0
+    if isinstance(embedding, list):
+        return len(embedding)
+    return 0
 
 
 def pgvector_enabled() -> bool:
@@ -908,7 +956,8 @@ def infer_category(text: str, source: str = "") -> str:
 
 
 def build_query(text: str, category: str | None) -> str:
-    return f"category: {category or 'unknown'}\n{text}"
+    expanded_terms = " ".join(sorted(category_keyword_terms(category)))
+    return f"category: {category or 'unknown'}\n{expanded_terms}\n{text}"
 
 
 def extract_terms(text: str) -> set[str]:
@@ -919,6 +968,98 @@ def extract_terms(text: str) -> set[str]:
         for size in (2, 3, 4):
             terms.update(run[index : index + size] for index in range(0, max(0, len(run) - size + 1)))
     return terms
+
+
+def category_keyword_terms(category: str | None) -> set[str]:
+    terms_by_category = {
+        "product_question": {
+            "product",
+            "feature",
+            "plan",
+            "pro",
+            "workspace",
+            "team",
+            "permission",
+            "permissions",
+            "audit",
+            "logs",
+            "integration",
+            "integrations",
+            "sso",
+            "webhook",
+            "api",
+            "产品",
+            "功能",
+            "套餐",
+            "版本",
+            "团队",
+            "工作区",
+            "协作",
+            "权限",
+            "管理",
+            "审计",
+            "日志",
+            "集成",
+        },
+        "refund": {
+            "refund",
+            "duplicate",
+            "charge",
+            "charged",
+            "billing",
+            "invoice",
+            "payment",
+            "退款",
+            "退费",
+            "重复",
+            "扣费",
+            "收费",
+            "账单",
+            "支付",
+            "发票",
+        },
+        "billing": {
+            "invoice",
+            "billing",
+            "receipt",
+            "tax",
+            "payment",
+            "账单",
+            "发票",
+            "收据",
+            "税务",
+            "支付",
+        },
+        "technical": {
+            "login",
+            "password",
+            "token",
+            "sso",
+            "access",
+            "workspace",
+            "登录",
+            "密码",
+            "重置",
+            "访问",
+            "工作区",
+            "令牌",
+        },
+        "complaint": {
+            "complaint",
+            "unhappy",
+            "cancel",
+            "legal",
+            "blocked",
+            "escalate",
+            "投诉",
+            "不满",
+            "取消",
+            "法律",
+            "律师",
+            "升级",
+        },
+    }
+    return terms_by_category.get(category or "", set())
 
 
 def keyword_overlap(query_terms: set[str], content: str) -> float:

@@ -238,7 +238,12 @@ def extract_pdf_image_reference_chunks(path: Path) -> tuple[list[ParsedChunk], l
                 extension = normalize_image_extension(image_data.get("ext", "png"))
                 asset_path = save_extracted_pdf_image(path, page_index, image_index, extension, image_bytes)
                 relative_asset = asset_path.relative_to(EXTRACTED_ASSETS_DIR.parent).as_posix()
-                image_description = describe_pdf_image(asset_path, path=path, page_number=page_index, image_index=image_index)
+                image_description, description_error = describe_pdf_image(
+                    asset_path,
+                    path=path,
+                    page_number=page_index,
+                    image_index=image_index,
+                )
                 asset = {
                     "type": "pdf_image",
                     "path": relative_asset,
@@ -246,7 +251,10 @@ def extract_pdf_image_reference_chunks(path: Path) -> tuple[list[ParsedChunk], l
                     "image_index": image_index,
                     "size_bytes": len(image_bytes),
                     "has_description": bool(image_description),
+                    "description_error": description_error,
                 }
+                if image_description:
+                    asset["description"] = image_description
                 assets.append(asset)
                 title = f"PDF 图片 第 {page_index} 页 图 {image_index}"
                 content = (
@@ -261,12 +269,15 @@ def extract_pdf_image_reference_chunks(path: Path) -> tuple[list[ParsedChunk], l
     return chunks, assets
 
 
-def describe_pdf_image(asset_path: Path, *, path: Path, page_number: int, image_index: int) -> str:
+def describe_pdf_image(asset_path: Path, *, path: Path, page_number: int, image_index: int) -> tuple[str, str]:
     context = f"来源 PDF: {path.name}; 页码: {page_number}; 图片序号: {image_index}"
     try:
-        return describe_image(asset_path, context=context) or ""
-    except VisionClientError:
-        return ""
+        description = describe_image(asset_path, context=context) or ""
+        if description:
+            return description, ""
+        return "", "vision_not_configured_or_image_too_large"
+    except VisionClientError as exc:
+        return "", str(exc)
 
 
 def build_pdf_image_chunk_text(image_description: str) -> str:
