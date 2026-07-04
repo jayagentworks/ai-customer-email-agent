@@ -121,6 +121,13 @@ current text RAG can retrieve these references, but it does not semantically
 understand non-text images unless OCR text or a future multimodal image model is
 added.
 
+If `SILICONFLOW_API_KEY` is configured, extracted PDF images are also sent to the
+optional vision model `Qwen/Qwen3-VL-8B-Instruct` to generate a concise Chinese
+image description. The description is indexed as text in the same image-reference
+chunk, so diagrams, screenshots, and product images can participate in RAG
+retrieval. If the vision API is unavailable, the system keeps the image asset
+reference and continues indexing without blocking the upload.
+
 Start all services:
 
 ```powershell
@@ -207,6 +214,7 @@ Important variables:
 - `SILICONFLOW_API_KEY`: API key for SiliconFlow.
 - `LLM_BASE_URL`: OpenAI-compatible chat completion endpoint.
 - `LLM_MODEL`: default `deepseek-ai/DeepSeek-V4-Flash`.
+- `VISION_MODEL`: default `Qwen/Qwen3-VL-8B-Instruct` for PDF image descriptions.
 - `EMBEDDING_BASE_URL`: OpenAI-compatible embedding endpoint.
 - `EMBEDDING_MODEL`: default `Qwen/Qwen3-Embedding-0.6B`.
 - `QQ_EMAIL_ADDRESS`: QQ mailbox address.

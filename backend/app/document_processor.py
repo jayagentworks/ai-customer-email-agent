@@ -6,6 +6,8 @@ from tempfile import TemporaryDirectory
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.vision_client import VisionClientError, describe_image
+
 
 SUPPORTED_KNOWLEDGE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".doc"}
 EXTRACTED_ASSETS_DIR = Path(__file__).resolve().parents[1] / "knowledge_docs" / "extracted_assets"
@@ -236,26 +238,44 @@ def extract_pdf_image_reference_chunks(path: Path) -> tuple[list[ParsedChunk], l
                 extension = normalize_image_extension(image_data.get("ext", "png"))
                 asset_path = save_extracted_pdf_image(path, page_index, image_index, extension, image_bytes)
                 relative_asset = asset_path.relative_to(EXTRACTED_ASSETS_DIR.parent).as_posix()
+                image_description = describe_pdf_image(asset_path, path=path, page_number=page_index, image_index=image_index)
                 asset = {
                     "type": "pdf_image",
                     "path": relative_asset,
                     "page_number": page_index,
                     "image_index": image_index,
                     "size_bytes": len(image_bytes),
+                    "has_description": bool(image_description),
                 }
                 assets.append(asset)
                 title = f"PDF 图片 第 {page_index} 页 图 {image_index}"
                 content = (
                     f"## {title}\n\n"
                     f"图片文件: {relative_asset}\n\n"
-                    "说明: 该 PDF 页面包含图片，系统已保存原始图片资产。"
-                    "当前文本 RAG 只索引此图片引用和页码，不会直接理解无文字图片内容。"
+                    f"{build_pdf_image_chunk_text(image_description)}"
                 )
                 chunks.append(ParsedChunk(content=content, page_number=page_index, section_title=title))
     finally:
         document.close()
 
     return chunks, assets
+
+
+def describe_pdf_image(asset_path: Path, *, path: Path, page_number: int, image_index: int) -> str:
+    context = f"来源 PDF: {path.name}; 页码: {page_number}; 图片序号: {image_index}"
+    try:
+        return describe_image(asset_path, context=context) or ""
+    except VisionClientError:
+        return ""
+
+
+def build_pdf_image_chunk_text(image_description: str) -> str:
+    if image_description:
+        return f"图片说明: {image_description}"
+    return (
+        "图片说明: 该 PDF 页面包含图片，系统已保存原始图片资产。"
+        "当前没有可用的多模态图片说明，文本 RAG 只索引此图片引用和页码。"
+    )
 
 
 def save_extracted_pdf_image(path: Path, page_number: int, image_index: int, extension: str, image_bytes: bytes) -> Path:
