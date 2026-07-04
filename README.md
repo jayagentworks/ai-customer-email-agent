@@ -76,6 +76,70 @@ More details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Quick Start
 
+### Docker Deployment
+
+Docker is the recommended way to run PostgreSQL + pgvector locally. The verified
+defaults use official Docker images, while package installation uses domestic
+mirrors where possible:
+
+- PostgreSQL + pgvector image: `pgvector/pgvector:pg17`
+- Python image: `python:3.12-slim`
+- Node image: `node:22-alpine`
+- Nginx image: `nginx:1.27-alpine`
+- Python packages: Tsinghua PyPI mirror
+- npm packages: npmmirror
+
+If your Docker image mirror is stable, you can override the image sources:
+
+```powershell
+$env:PGVECTOR_IMAGE="docker.m.daocloud.io/pgvector/pgvector:pg17"
+$env:PYTHON_IMAGE="docker.m.daocloud.io/library/python:3.12-slim"
+$env:NODE_IMAGE="docker.m.daocloud.io/library/node:22-alpine"
+$env:NGINX_IMAGE="docker.m.daocloud.io/library/nginx:1.27-alpine"
+docker compose up -d --build
+```
+
+The backend image also installs local OCR/runtime dependencies:
+
+- `tesseract-ocr`
+- `tesseract-ocr-chi-sim`
+- `tesseract-ocr-eng`
+- `fonts-noto-cjk`
+- `libreoffice-writer`
+
+Start all services:
+
+```powershell
+copy .env.example .env
+# Edit .env and configure QQ mailbox and LLM/embedding API keys.
+docker compose up -d --build
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+Backend health check:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8010/
+```
+
+If you only want the database container and still run backend/frontend on the
+host machine:
+
+```powershell
+docker compose up -d db
+```
+
+Then keep this local database URL:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5433/customer_email_agent
+```
+
 ### 1. Backend
 
 ```powershell
