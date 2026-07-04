@@ -18,6 +18,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     && apt-get install -y --no-install-recommends \
       fonts-noto-cjk \
       libreoffice-writer \
+      poppler-utils \
       tesseract-ocr \
       tesseract-ocr-chi-sim \
       tesseract-ocr-eng \

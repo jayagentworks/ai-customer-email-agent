@@ -106,6 +106,12 @@ The backend image also installs local OCR/runtime dependencies:
 - `tesseract-ocr-eng`
 - `fonts-noto-cjk`
 - `libreoffice-writer`
+- `poppler-utils`
+
+PDF parsing uses a layered strategy: the system first extracts the built-in PDF
+text layer with `pypdf`; if a page has no extractable text, it renders that page
+with `pdftoppm` and runs local `tesseract` OCR with `chi_sim+eng`. This keeps
+normal text PDFs fast while still supporting scanned Chinese/English PDFs.
 
 Start all services:
 

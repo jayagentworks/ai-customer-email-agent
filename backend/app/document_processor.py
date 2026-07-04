@@ -101,9 +101,20 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
     total_cleaned_chars = 0
     total_noise_lines = 0
     pages_with_text = 0
+    pages_with_ocr = 0
+    warnings: list[str] = []
 
     for page_index, page in enumerate(reader.pages, start=1):
         raw_text = page.extract_text() or ""
+        text_source = "text-layer"
+        if not raw_text.strip():
+            raw_text = ocr_pdf_page(path, page_index)
+            text_source = "ocr"
+            if raw_text.strip():
+                pages_with_ocr += 1
+            else:
+                warnings.append(f"Page {page_index} had no extractable text and OCR returned no text.")
+
         total_original_chars += len(raw_text)
         clean = clean_text_with_report(raw_text)
         total_cleaned_chars += clean.cleaned_chars
@@ -114,16 +125,17 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
         first_text = first_text or clean.text
         for chunk in split_markdown_like_text(clean.text, page_number=page_index):
             page_chunks.append(chunk)
+        if text_source == "ocr":
+            warnings.append(f"Page {page_index} was parsed by local OCR.")
 
     if not page_chunks:
-        raise ValueError("No extractable text found in this PDF. Scanned PDFs need OCR and are not supported yet.")
+        raise ValueError("No extractable text found in this PDF. Local OCR also returned no reliable text.")
 
-    warnings = []
     if pages_with_text < len(reader.pages):
         warnings.append(f"{len(reader.pages) - pages_with_text} page(s) had no extractable text.")
     report = ParseReport(
         file_type="pdf",
-        parser="pypdf",
+        parser="pypdf + tesseract-ocr" if pages_with_ocr else "pypdf",
         original_chars=total_original_chars,
         cleaned_chars=total_cleaned_chars,
         noise_lines_removed=total_noise_lines,
@@ -133,6 +145,59 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
         warnings=warnings,
     )
     return ParsedDocument(title=extract_title(first_text, path.stem), chunks=page_chunks, report=report)
+
+
+def ocr_pdf_page(path: Path, page_number: int) -> str:
+    pdftoppm = find_executable("pdftoppm")
+    tesseract = find_executable("tesseract")
+    if not pdftoppm or not tesseract:
+        return ""
+
+    with TemporaryDirectory(prefix="pdf-ocr-") as tmp:
+        output_prefix = Path(tmp) / f"page-{page_number}"
+        render_command = [
+            str(pdftoppm),
+            "-f",
+            str(page_number),
+            "-l",
+            str(page_number),
+            "-r",
+            "220",
+            "-png",
+            str(path),
+            str(output_prefix),
+        ]
+        try:
+            render_result = subprocess.run(render_command, capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        if render_result.returncode != 0:
+            return ""
+
+        rendered_pages = sorted(Path(tmp).glob(f"{output_prefix.name}-*.png"))
+        if not rendered_pages:
+            rendered_pages = sorted(Path(tmp).glob("*.png"))
+        if not rendered_pages:
+            return ""
+
+        ocr_texts: list[str] = []
+        for image_path in rendered_pages:
+            ocr_command = [
+                str(tesseract),
+                str(image_path),
+                "stdout",
+                "-l",
+                "chi_sim+eng",
+                "--psm",
+                "6",
+            ]
+            try:
+                ocr_result = subprocess.run(ocr_command, capture_output=True, text=True, timeout=90)
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if ocr_result.returncode == 0 and ocr_result.stdout.strip():
+                ocr_texts.append(ocr_result.stdout.strip())
+        return "\n\n".join(ocr_texts).strip()
 
 
 def parse_docx_document(path: Path) -> ParsedDocument:
@@ -265,9 +330,9 @@ def convert_doc_to_docx(path: Path) -> Path:
 
 
 def find_soffice() -> Path | None:
-    found = shutil.which("soffice") or shutil.which("soffice.exe")
+    found = find_executable("soffice")
     if found:
-        return Path(found)
+        return found
 
     candidates = [
         Path("C:/Program Files/LibreOffice/program/soffice.exe"),
@@ -278,6 +343,17 @@ def find_soffice() -> Path | None:
         Path("A:/tools/LibreOffice/program/soffice.exe"),
     ]
     return next((candidate for candidate in candidates if candidate.exists()), None)
+
+
+def find_executable(name: str) -> Path | None:
+    candidates = [name]
+    if not name.endswith(".exe"):
+        candidates.append(f"{name}.exe")
+    for candidate in candidates:
+        found = shutil.which(candidate)
+        if found:
+            return Path(found)
+    return None
 
 
 def clean_text(text: str) -> str:
