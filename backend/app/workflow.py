@@ -1,3 +1,18 @@
+"""邮件处理 Agent 的 LangGraph 编排层。
+
+这个模块是整个系统的“决策中枢”：一封邮件进入后，会被包装成
+``EmailWorkflowState``，再沿着 LangGraph 节点依次经过低成本预处理、
+非客服过滤、语义分析、知识库检索、回复草稿生成和审核决策。
+
+设计上这里刻意把“便宜的规则判断”和“昂贵的 LLM/RAG 调用”拆开：
+1. 先用本地规则做语言、风险、非客服场景的快速判断，尽量避免无意义调用模型。
+2. 确认为客服邮件后，再进入语义分析和 RAG 检索。
+3. 只有需要回复的邮件才生成草稿，并根据风险与置信度决定是否进入人工审核。
+
+面试表达时可以把它理解为：LangGraph 负责流程编排，每个 node 负责一个稳定、
+可测试、可替换的 Agent 子能力。
+"""
+
 import re
 from typing import Literal, TypedDict
 
@@ -21,10 +36,13 @@ WorkflowRoute = Literal["relevant", "irrelevant"]
 
 
 class EmailWorkflowState(TypedDict, total=False):
-    """Mutable state passed between LangGraph nodes.
+    """在 LangGraph 节点之间传递的可变状态。
 
-    Nodes return partial updates. LangGraph merges those updates into the
-    current state, so each node only needs to return the fields it changed.
+    每个节点都不直接返回一个全新的业务对象，而是返回它改动过的字段。
+    LangGraph 会把这些 partial update 合并回当前 state。这样做的好处是：
+    - 节点之间边界清晰，方便单独测试和替换。
+    - 可以在流程中插入新的 Agent 节点，而不需要改动所有上下游代码。
+    - 出错时可以根据 state 中的 email.steps 还原执行轨迹。
     """
 
     email: EmailRecord
@@ -32,6 +50,11 @@ class EmailWorkflowState(TypedDict, total=False):
 
 
 def process_email(email: EmailRecord, use_llm: bool = True) -> EmailRecord:
+    """执行完整邮件处理流程。
+
+    ``use_llm`` 主要用于测试或降级场景：当模型平台不可用时，系统仍然可以依靠
+    规则和模板完成基础分类，保证服务不会因为外部模型失败而整体不可用。
+    """
     email.steps = []
     email.agent_metrics = AgentMetrics()
     result = email_workflow.invoke({"email": email, "use_llm": use_llm})
@@ -39,6 +62,12 @@ def process_email(email: EmailRecord, use_llm: bool = True) -> EmailRecord:
 
 
 def build_email_context(email: EmailRecord) -> str:
+    """把邮件主题、正文和附件预览拼成统一上下文。
+
+    后续的分类、RAG 查询和 LLM 生成都使用同一个上下文，避免“正文看到了，
+    附件没看到”导致判断不一致。附件只放入解析后的预览文本，不直接塞原文件，
+    这是为了控制 token 成本和模型输入长度。
+    """
     attachment_lines: list[str] = []
     for attachment in email.attachments:
         meta = f"{attachment.filename} ({attachment.content_type or 'unknown'}, {attachment.size_bytes} bytes)"
@@ -54,6 +83,15 @@ def build_email_context(email: EmailRecord) -> str:
 
 
 def preprocess_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """低成本预处理节点。
+
+    这里不调用 LLM，只做三件事：
+    1. 判断邮件语言，决定后续回复和提示词使用中文还是英文。
+    2. 命中一些强信号，例如退款、取消、法律风险、重复联系等。
+    3. 标记是否有附件，为后续风险等级和人工审核提供依据。
+
+    这个节点是成本控制的第一道闸门，适合放稳定、可解释、召回优先的规则。
+    """
     email = state["email"]
     text = build_email_context(email).lower()
     is_chinese = contains_chinese(text)
@@ -85,6 +123,15 @@ def preprocess_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """语义分析节点：识别邮件类别、置信度和风险等级。
+
+    该节点优先调用 LLM 做更灵活的语义判断；如果 LLM 不可用或调用失败，
+    会回退到本地规则分类。这样既能在真实环境中获得较好的理解能力，
+    又能在模型欠费、网络失败或本地演示时保持系统可运行。
+
+    这里统计的 token 和调用次数会写入 ``email.agent_metrics``，
+    前端的“Agent 成本与 token 监控”就是基于这些指标展示的。
+    """
     email = state["email"]
     email_context = build_email_context(email)
     text = email_context.lower()
@@ -186,6 +233,13 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """非客服邮件过滤节点。
+
+    这个节点在 RAG 和回复生成之前执行。如果邮件只是平台通知、安全提醒、
+    验证码、营销订阅等非客服场景，就直接标记为 ``irrelevant``。
+    被过滤的邮件仍会保留在系统里，方便人工复核，但不会进入知识库检索和
+    回复草稿生成，从而避免浪费 LLM token。
+    """
     email = state["email"]
     relevant, reason = is_customer_support_request(email)
     if relevant:
@@ -223,10 +277,18 @@ def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def route_after_relevance(state: EmailWorkflowState) -> WorkflowRoute:
+    """根据非客服过滤结果决定 LangGraph 后续路径。"""
     return "irrelevant" if state["email"].status == "irrelevant" else "relevant"
 
 
 def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
+    """判断邮件是否属于客服处理范围。
+
+    这里采用“黑名单通知信号 + 白名单客户诉求信号”的组合策略：
+    - 如果发件人或正文明显来自平台通知、验证码、安全提醒，则倾向于过滤。
+    - 如果正文明确出现“退款、无法登录、账单、套餐咨询”等客户诉求，则放行。
+    - 当二者冲突时，优先保留人工可复核的客服邮件，避免误杀真实客户请求。
+    """
     text = build_email_context(email).lower()
     sender = f"{email.customer_name} {email.customer_email}".lower()
     platform_senders = {
@@ -308,6 +370,11 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
 
 
 def retrieve_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """知识库检索节点。
+
+    只有通过非客服过滤的邮件才会到这里。节点会记录 RAG 耗时、embedding 调用次数
+    和 token 估算，用于前端成本监控。
+    """
     email = state["email"]
     started_at = time.perf_counter()
     email.knowledge_hits = retrieve_knowledge(build_email_context(email), category=email.category)
@@ -329,6 +396,11 @@ def retrieve_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """回复草稿生成节点。
+
+    优先使用 LLM 基于邮件上下文和 Top-K 知识库依据生成回复；如果 LLM 不可用，
+    使用结构化模板兜底，保证演示环境仍有可读草稿。
+    """
     email = state["email"]
     email.draft_reply, used_llm, draft_error = generate_draft_reply(email)
     if used_llm:
@@ -359,6 +431,11 @@ def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def regenerate_draft_reply(email: EmailRecord) -> EmailRecord:
+    """根据同一封邮件重新生成一版回复。
+
+    重新生成不会重新分类，也不会重新改变风险等级；它只切换回复风格 variant，
+    复用已有的 RAG 命中结果，减少重复检索成本。
+    """
     variant = next_reply_variant(email)
     email.draft_reply, used_llm, draft_error = generate_draft_reply(email, variant=variant)
     if used_llm:
@@ -389,6 +466,7 @@ def regenerate_draft_reply(email: EmailRecord) -> EmailRecord:
 
 
 def next_reply_variant(email: EmailRecord) -> str:
+    """根据历史重新生成次数选择下一种回复风格。"""
     if not email.draft_reply.strip():
         return "default"
     generated_count = sum(1 for step in email.steps if step.name == "Regenerate draft reply")
@@ -396,6 +474,7 @@ def next_reply_variant(email: EmailRecord) -> str:
 
 
 def build_llm_knowledge_hits(email: EmailRecord) -> list[dict]:
+    """把 KnowledgeHit 转成 LLM prompt 所需的紧凑结构。"""
     return [
         {
             "title": hit.title,
@@ -412,6 +491,7 @@ def build_llm_knowledge_hits(email: EmailRecord) -> list[dict]:
 
 
 def estimate_draft_input_tokens(email: EmailRecord) -> int:
+    """估算草稿生成 prompt 的输入 token。"""
     knowledge_context = "\n\n".join(
         f"{hit.title} ({hit.source})\n{hit.snippet}" for hit in email.knowledge_hits[:3]
     )
@@ -425,6 +505,11 @@ def build_draft_reply(email: EmailRecord, variant: str = "default") -> str:
 
 
 def generate_draft_reply(email: EmailRecord, variant: str = "default") -> tuple[str, bool, str]:
+    """生成回复草稿，并返回是否实际调用了 LLM。
+
+    返回三元组：``(草稿内容, 是否使用 LLM, 错误原因)``。
+    调用方据此记录成本指标和执行轨迹。
+    """
     is_chinese = contains_chinese(build_email_context(email))
     if is_llm_configured():
         try:
@@ -715,6 +800,11 @@ def pick_variant_body(bodies: list[str], variant: str) -> str:
 
 
 def review_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """人工审核路由节点。
+
+    低风险、高置信度且有知识库依据的邮件进入 ``ready_to_send``，
+    仍然需要用户一键确认后才真实发送；其他情况进入人工审核队列。
+    """
     email = state["email"]
     can_prepare_to_send = (
         email.risk_level == "low"
@@ -739,7 +829,11 @@ def review_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
 
 def build_email_workflow():
-    """Build the customer email Agent as a LangGraph StateGraph."""
+    """构建邮件 Agent 的 LangGraph 状态机。
+
+    图结构是线性的主流程加一个条件分支：
+    ``relevance_gate`` 判断为非客服邮件时直接结束，否则继续语义分析、RAG 和草稿生成。
+    """
     graph = StateGraph(EmailWorkflowState)
     graph.add_node("preprocess", preprocess_node)
     graph.add_node("semantic_analysis", semantic_analysis_node)
@@ -763,7 +857,7 @@ email_workflow = build_email_workflow()
 
 
 def get_workflow_architecture() -> dict:
-    """Return a lightweight description for docs, debugging, or interviews."""
+    """返回轻量级架构描述，方便文档、调试或面试讲解使用。"""
     return {
         "engine": "LangGraph StateGraph",
         "state": ["email", "use_llm"],
@@ -793,6 +887,11 @@ def contains_chinese(text: str) -> bool:
 
 
 def classify_semantically(text: str) -> tuple[str, float, list[str]]:
+    """规则兜底分类器。
+
+    当 LLM 不可用时，系统会用关键词集合粗略判断邮件类别和置信度。
+    这不是最终理想分类能力，而是保障系统降级可用。
+    """
     rules = [
         ("refund", {"refund", "charged", "duplicate", "payment", "退款", "退费", "扣费", "重复扣费", "重复收费", "付款"}),
         ("complaint", {"unhappy", "cancel", "third email", "nobody", "blocked", "投诉", "不满意", "取消", "没人处理", "第三次", "阻塞"}),
@@ -817,6 +916,7 @@ def classify_semantically(text: str) -> tuple[str, float, list[str]]:
 
 
 def build_analysis_reason(email: EmailRecord, matched: list[str]) -> str:
+    """根据规则分类命中结果生成分析说明。"""
     if email.detected_language == "zh":
         matched_text = "、".join(matched) if matched else "无明显关键词"
         flags_text = "、".join(email.preprocessing_flags) if email.preprocessing_flags else "无强规则标记"
@@ -828,6 +928,7 @@ def build_analysis_reason(email: EmailRecord, matched: list[str]) -> str:
 
 
 def apply_llm_analysis(email: EmailRecord, result: SemanticAnalysisResult) -> None:
+    """把 LLM 语义分析结果写回 EmailRecord。"""
     email.category = result.category
     email.confidence = round(result.confidence, 2)
     email.risk_level = result.risk_level

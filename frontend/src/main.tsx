@@ -1,3 +1,17 @@
+/**
+ * 前端单页应用入口。
+ *
+ * 这个文件负责把后端邮件 Agent 的能力组织成企业后台页面：
+ * - 左侧侧边栏：收件箱、审核队列、知识库、运行日志、系统设置。
+ * - 收件箱：展示客服邮件与非客服邮件复核列表，并支持同步 QQ 邮箱。
+ * - 审核队列：展示需要人工确认的邮件、回复草稿、风险标记和执行流程。
+ * - 知识库：支持上传/编辑/删除/版本回退/重新索引。
+ * - 运行日志：展示邮件 Agent 轨迹、知识库操作和成本汇总。
+ *
+ * 目前前端没有引入复杂状态管理库，所有状态都集中在 App 组件中，便于毕业/实习
+ * 项目演示时快速追踪数据流。
+ */
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -27,6 +41,7 @@ import "./styles.css";
 
 const API_URL = "http://localhost:8010";
 
+// 前后端共享的枚举类型。这里用 TypeScript union 限制状态值，避免 UI 写错状态字符串。
 type Locale = "en" | "zh";
 type ActiveView = "inbox" | "review" | "knowledge" | "runs" | "settings";
 type EmailStatus = "new" | "processed" | "human_review" | "ready_to_send" | "needs_revision" | "escalated" | "sent" | "irrelevant";
@@ -178,6 +193,7 @@ const sampleBodies = [
 ];
 
 const copy = {
+  // 页面文案集中管理，语言切换时只需要根据 locale 取对应文案。
   en: {
     appName: "Email Agent",
     appScope: "Support operations",
@@ -391,6 +407,8 @@ function normalizeUploadError(detail: unknown) {
 }
 
 function App() {
+  // 邮件、知识库和日志是三个主要业务数据源。为了让页面切换时不反复丢状态，
+  // 它们统一放在 App 顶层，然后向不同视图组件传递。
   const [emails, setEmails] = useState<EmailRecord[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDocument[]>([]);
@@ -434,6 +452,8 @@ function App() {
   const selectedIdRef = useRef("");
 
   const t = copy[locale];
+  // 收件箱中把客服邮件和非客服邮件拆成两个可折叠列表：
+  // 客服邮件用于处理和发送；非客服邮件只用于快速复核，避免通知类邮件干扰主流程。
   const inboxEmails = emails.filter((email) => email.status !== "irrelevant");
   const irrelevantEmails = emails.filter((email) => email.status === "irrelevant");
   const selected = useMemo(() => emails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? emails[0], [emails, inboxEmails, selectedId]);
@@ -453,6 +473,7 @@ function App() {
   }, [selectedId]);
 
   async function loadEmails(options: { selectFirstIfEmpty?: boolean } = {}) {
+    // 保留当前选中邮件，避免后台自动同步刷新后页面突然跳回第一封。
     const response = await fetch(`${API_URL}/emails`);
     const data = (await response.json()) as EmailRecord[];
     setEmails(data);
@@ -571,6 +592,8 @@ function App() {
   }
 
   async function uploadKnowledgeFileWithDuplicatePrompt(url: string, file: File, method: "POST" | "PUT") {
+    // 上传知识库文件时，后端可能返回“强重复”或“弱重复”。
+    // 强重复直接阻止；弱重复由用户确认后带 force_weak_duplicate 再提交一次。
     const send = async (forceWeakDuplicate: boolean) => {
       const formData = new FormData();
       formData.append("file", file);
@@ -687,6 +710,7 @@ function App() {
   }
 
   async function syncQQMail(options: { silent?: boolean } = {}) {
+    // 手动/自动同步共用同一入口。syncingRef 用来避免上一次同步未结束时重复发起请求。
     if (syncingRef.current) return;
     syncingRef.current = true;
     if (!options.silent) setSyncing(true);
@@ -706,6 +730,8 @@ function App() {
   }
 
   function pollMailProcessing(round = 0, silent = false) {
+    // QQ 邮箱导入后，后端会在 BackgroundTasks 中异步处理邮件。
+    // 前端短时间轮询几次，让用户能看到“处理中 -> 分类完成”的变化。
     if (round >= 20) return;
     window.setTimeout(async () => {
       await Promise.all([loadEmails(), loadOperationLogs()]);
@@ -741,6 +767,7 @@ function App() {
   }
 
   async function bulkSendReadyReplies() {
+    // 批量发送只允许已全部查看过的低风险邮件，避免用户没看草稿就误发。
     if (readyToSendEmails.length === 0) return;
     if (!canBulkSendReady) {
       window.alert(`请先逐封查看全部可发送邮件。当前已查看 ${viewedReadyCount}/${readyToSendEmails.length} 封。`);
@@ -775,6 +802,7 @@ function App() {
   }
 
   async function regenerateReply(emailId: string) {
+    // 重新生成回复可能需要等待 LLM。这里用前端估算进度条缓解“按钮点了没反应”的等待感。
     setRegeneratingId(emailId);
     setRegenerateProgress(8);
     const startedAt = Date.now();
@@ -806,6 +834,7 @@ function App() {
   }
 
   async function review(action: "approve" | "escalate" | "revise" | "undo_escalate", note = "", revisedReply = "") {
+    // 所有人工审核动作都走同一个接口，后端负责更新状态和记录审核历史。
     if (!selected) return;
     const response = await fetch(`${API_URL}/emails/${selected.id}/review`, {
       method: "POST",
@@ -823,12 +852,14 @@ function App() {
   }
 
   useEffect(() => {
+    // 页面初始化时一次性加载所有基础数据。
     loadEmails({ selectFirstIfEmpty: true });
     loadKnowledgeDocuments();
     loadOperationLogs();
   }, []);
 
   useEffect(() => {
+    // 自动同步 QQ 邮箱只在浏览器标签可见时运行，减少后台空转请求。
     const syncWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
       syncQQMail({ silent: true });
@@ -842,6 +873,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // 用户看过所有 ready_to_send 邮件后，才允许批量确认发送。
     if (!selected || selected.status !== "ready_to_send") return;
     setViewedReadyIds((items) => (items.includes(selected.id) ? items : [...items, selected.id]));
   }, [selected?.id, selected?.status]);
@@ -852,6 +884,7 @@ function App() {
   }, [emails]);
 
   useEffect(() => {
+    // 如果知识库文档仍在后台索引，前端短轮询刷新状态。
     if (!knowledgeDocs.some((doc) => normalizeKnowledgeStatus(doc.status) === "processing")) return;
     const timer = window.setTimeout(() => loadKnowledgeDocuments(), 2000);
     return () => window.clearTimeout(timer);
@@ -1035,6 +1068,7 @@ function Topbar({ title, subtitle, t, emails, processedCount }: { title: string;
 }
 
 function KnowledgePage(props: {
+  // 知识库页面集中处理文档上传、手动录入、编辑、版本和重建索引。
   docs: KnowledgeDocument[];
   versions: Record<string, KnowledgeDocumentVersion[]>;
   file: File | null;
@@ -1167,6 +1201,7 @@ function KnowledgeReportSummary({ doc }: { doc: KnowledgeDocument }) {
 }
 
 function KnowledgeParseReportPanel({ report, chunkCount }: { report?: KnowledgeParseReport; chunkCount: number }) {
+  // 解析报告用于解释文档是如何被清洗和切分的，方便用户发现 OCR/表格/图片问题。
   if (!report || Object.keys(report).length === 0) {
     return <div className="parseReport"><strong>解析报告</strong><span>暂无解析报告，重新索引后会生成。</span></div>;
   }
@@ -1232,6 +1267,7 @@ function KnowledgeVersionHistory({
 }
 
 function AgentCostPanel({ metrics, locale }: { metrics: AgentMetrics; locale: Locale }) {
+  // 成本面板只做估算展示，真实账单仍以模型平台为准。
   const totalTokens = metrics.input_tokens + metrics.output_tokens + metrics.embedding_tokens;
   const items = locale === "zh"
     ? [
@@ -1265,6 +1301,7 @@ function AgentCostPanel({ metrics, locale }: { metrics: AgentMetrics; locale: Lo
 }
 
 function RunLogPage({ operationLogs, emails, cleaningLogs, onCleanup, locale }: { operationLogs: OperationLog[]; emails: EmailRecord[]; cleaningLogs: boolean; onCleanup: () => void; locale: Locale }) {
+  // 运行日志把“邮件 Agent 轨迹”和“知识库操作”拆开展示，避免审核历史挤在邮件详情里。
   const knowledgeLogs = operationLogs.filter((log) => log.scope === "knowledge");
   const agentTraces = emails.flatMap((email) => email.steps.map((step) => ({ email, step })));
   const todayEmails = emails.filter((email) => isTodayOrRecent(email.updated_at));
@@ -1432,6 +1469,8 @@ function Composer({ t, form, setForm, loading, syncing, loadEmails, syncQQMail, 
 }
 
 function EmailQueue({
+  // 收件箱队列支持两个折叠列表：客服邮件和非客服邮件复核。
+  // 每个列表内部独立滚动，避免两个列表同时展开时互相遮挡。
   title,
   hint,
   emails,
@@ -1500,6 +1539,7 @@ function EmailQueue({
 }
 
 function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regenerateReply, regeneratingId, regenerateProgress }: {
+  // 邮件详情是人工审核的主工作台：展示原文、成本指标、草稿、风险、历史和执行流程。
   selected: EmailRecord;
   locale: Locale;
   t: Record<string, string>;

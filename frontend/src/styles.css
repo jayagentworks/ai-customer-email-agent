@@ -1,4 +1,5 @@
 :root {
+  /* 全局设计基线：企业后台以浅灰背景、深色正文和系统字体为主，保证信息密度和可读性。 */
   color: #172026;
   background: #f4f6f8;
   font-family:
@@ -27,12 +28,14 @@ button {
 }
 
 .shell {
+  /* 主布局：左侧固定导航，右侧内容区自适应。 */
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .sidebar {
+  /* 侧边栏承载模块导航，样式保持轻量，避免抢占主工作区注意力。 */
   background: #fbfcfd;
   border-right: 1px solid #dfe5ea;
   padding: 20px 18px;
@@ -89,12 +92,14 @@ button {
 .opsPanel,
 .queuePane,
 .settingsPanel {
+  /* 后台页面的主要容器统一使用浅边框和小圆角，形成一致的企业工具感。 */
   border: 1px solid #dfe5ea;
   background: #ffffff;
   border-radius: 8px;
 }
 
 .sideNav {
+  /* 模块入口采用纵向列表，当前模块用浅蓝背景提示。 */
   display: grid;
   gap: 6px;
 }
@@ -154,6 +159,7 @@ button {
 }
 
 .composer {
+  /* 手动创建测试邮件和同步 QQ 邮箱都放在 composer 区域。 */
   padding: 16px;
 }
 

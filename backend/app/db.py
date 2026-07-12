@@ -1,3 +1,12 @@
+"""数据库连接与运行期 schema 兼容层。
+
+项目默认使用 ``DATABASE_URL`` 指向 PostgreSQL；如果没有配置，会退回 SQLite，
+方便本地快速演示。知识库向量检索需要 PostgreSQL + pgvector，SQLite 只能作为
+基础功能降级环境。
+
+``ensure_runtime_columns`` 用于给旧数据库补新增字段，避免开发过程中频繁手动迁移。
+"""
+
 import os
 import warnings
 from pathlib import Path
@@ -18,10 +27,13 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 class Base(DeclarativeBase):
+    """SQLAlchemy ORM 基类。"""
+
     pass
 
 
 def init_db() -> None:
+    """初始化所有 ORM 表，并补齐运行期新增字段。"""
     from app import db_models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
@@ -29,6 +41,11 @@ def init_db() -> None:
 
 
 def ensure_runtime_columns() -> None:
+    """为旧表补齐新增字段。
+
+    这个项目迭代过程中新增过附件、成本指标、解析报告、pgvector 字段等。
+    这里用轻量 ALTER TABLE 保证旧环境启动时也能继续运行。
+    """
     inspector = inspect(engine)
     if "emails" in inspector.get_table_names():
         email_columns = get_column_names(inspector, "emails")
@@ -110,6 +127,11 @@ def get_column_names(inspector, table_name: str) -> set[str]:
 
 
 def ensure_pgvector_columns(chunk_columns: set[str]) -> None:
+    """确保 PostgreSQL 中存在 pgvector 扩展和向量字段。
+
+    ``embedding`` JSON 字段用于兼容和调试；``embedding_vector`` 字段用于数据库侧
+    向量近邻召回。
+    """
     if engine.dialect.name != "postgresql":
         return
 

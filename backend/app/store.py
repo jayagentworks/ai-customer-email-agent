@@ -1,3 +1,10 @@
+"""邮件持久化仓储层。
+
+``EmailStore`` 负责在 Pydantic 业务模型和 SQLAlchemy ORM 模型之间转换。
+接口层和 workflow 层都只操作 ``EmailRecord``，不直接接触数据库表结构，
+这样可以减少业务逻辑对数据库实现的依赖。
+"""
+
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, func, select
@@ -9,7 +16,13 @@ from app.models import AgentMetrics, EmailAttachment, EmailCreate, EmailRecord, 
 
 
 class EmailStore:
+    """邮件仓储对象。
+
+    这里封装了邮件列表、单封查询、保存、审核记录、去重和日志清理等操作。
+    """
+
     def __init__(self) -> None:
+        """初始化数据库，并在空库时写入少量示例邮件。"""
         init_db()
         with SessionLocal() as session:
             email_count = session.scalar(select(func.count()).select_from(EmailORM))
@@ -40,6 +53,7 @@ class EmailStore:
         return EmailRecord(**payload.model_dump())
 
     def exists_provider_message(self, provider: str, provider_message_id: str) -> bool:
+        """根据邮箱服务商 message id 判断邮件是否已经导入。"""
         if not provider_message_id:
             return False
         with SessionLocal() as session:
@@ -66,6 +80,7 @@ class EmailStore:
             return {value for value in rows if value}
 
     def save(self, email: EmailRecord) -> EmailRecord:
+        """保存邮件以及它的执行轨迹。"""
         with SessionLocal() as session:
             saved = self._save(session, email)
             session.commit()
@@ -73,6 +88,11 @@ class EmailStore:
             return self.get(saved.id) or email
 
     def record_review(self, email_id: str, payload: ReviewAction) -> None:
+        """记录人工审核动作。
+
+        如果连续提交完全相同的动作、备注和修改稿，则不重复写入，避免用户反复点击
+        “升级/撤销”时审核历史无限膨胀。
+        """
         with SessionLocal() as session:
             latest = session.scalar(
                 select(ReviewActionORM)
@@ -97,6 +117,7 @@ class EmailStore:
             session.commit()
 
     def cleanup_workflow_steps(self, retention_days: int = 30) -> int:
+        """清理已结束邮件的旧执行轨迹。"""
         cutoff = datetime.utcnow() - timedelta(days=retention_days)
         closed_statuses = ("processed", "ready_to_send", "escalated", "sent")
         with SessionLocal() as session:

@@ -1,3 +1,14 @@
+"""FastAPI 接口入口。
+
+这个文件只负责 HTTP API 编排：
+- 邮件相关接口：创建/同步/处理/审核/发送。
+- 知识库相关接口：上传、增删改查、版本回退、重新索引。
+- 运行日志接口：展示和清理邮件 Agent 轨迹、知识库操作日志。
+
+真正的业务逻辑分别下沉到 ``workflow.py``、``knowledge.py``、``mail_client.py``
+和 ``store.py``，这样接口层保持薄而清晰。
+"""
+
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -39,6 +50,7 @@ from app.workflow import process_email, regenerate_draft_reply, sanitize_custome
 
 app = FastAPI(title="Customer Email Agent API")
 
+# 本项目的前端是本地 Vite 应用，因此只开放本地开发端口的跨域访问。
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -52,11 +64,16 @@ store = EmailStore()
 
 @app.get("/")
 def health() -> dict[str, str]:
+    """健康检查接口，用于确认后端服务已启动。"""
     return {"message": "Customer Email Agent API is alive"}
+
+
+# ------------------------- 邮件处理接口 -------------------------
 
 
 @app.get("/emails", response_model=list[EmailRecord])
 def list_emails() -> list[EmailRecord]:
+    """返回系统中的邮件列表。"""
     return store.list()
 
 
@@ -70,6 +87,7 @@ def get_email(email_id: str) -> EmailRecord:
 
 @app.post("/emails/process", response_model=EmailRecord)
 def create_and_process_email(payload: EmailCreate) -> EmailRecord:
+    """创建一封邮件并立即执行 Agent 工作流。"""
     email = store.create(payload)
     processed = process_email(email)
     saved = store.save(processed)
@@ -92,6 +110,11 @@ def create_and_process_email(payload: EmailCreate) -> EmailRecord:
 
 @app.post("/emails/{email_id}/review", response_model=EmailRecord)
 def review_email(email_id: str, payload: ReviewAction) -> EmailRecord:
+    """人工审核邮件草稿。
+
+    审核动作包括通过、要求修改、升级处理和撤销升级。每次审核都会写入
+    review history，方便前端展示人工操作记录。
+    """
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -131,6 +154,7 @@ def review_email(email_id: str, payload: ReviewAction) -> EmailRecord:
 
 @app.post("/emails/{email_id}/draft/regenerate", response_model=EmailRecord)
 def regenerate_email_draft(email_id: str) -> EmailRecord:
+    """重新生成当前邮件的回复草稿。"""
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -154,6 +178,12 @@ def regenerate_email_draft(email_id: str) -> EmailRecord:
 
 @app.post("/mail/qq/import")
 def import_qq_mail(background_tasks: BackgroundTasks, limit: int = Query(default=10, ge=1, le=50)) -> dict:
+    """同步 QQ 邮箱并把新邮件加入后台处理队列。
+
+    接口返回时不一定已经完成 Agent 分析，因为每封新邮件会通过 BackgroundTasks
+    异步调用 ``process_imported_email``。这样前端可以先看到“已同步，处理中”，
+    再轮询刷新最终分类结果。
+    """
     try:
         known_message_ids = store.list_provider_message_ids("qq", limit=300)
         imported = fetch_unread_qq_emails(limit=limit, known_message_ids=known_message_ids)
@@ -198,6 +228,7 @@ def import_qq_mail(background_tasks: BackgroundTasks, limit: int = Query(default
 
 
 def process_imported_email(email_id: str) -> None:
+    """后台处理从 QQ 邮箱导入的邮件。"""
     email = store.get(email_id)
     if not email:
         return
@@ -220,6 +251,7 @@ def process_imported_email(email_id: str) -> None:
 
 @app.delete("/mail/qq/corrupted")
 def delete_corrupted_qq_mail() -> dict[str, int]:
+    """清理历史乱码邮件记录，方便重新从邮箱同步。"""
     deleted_count = store.delete_corrupted_provider_messages("qq")
     record_operation_log(
         scope="mail",
@@ -236,6 +268,10 @@ def delete_corrupted_qq_mail() -> dict[str, int]:
 
 @app.post("/emails/{email_id}/send", response_model=EmailRecord)
 def send_email_reply(email_id: str) -> EmailRecord:
+    """发送经过人工确认的回复。
+
+    只有 ``ready_to_send`` 状态的邮件允许发送，防止低置信度或未审核草稿被误发。
+    """
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -274,11 +310,13 @@ def send_email_reply(email_id: str) -> EmailRecord:
 
 @app.get("/knowledge/documents", response_model=list[KnowledgeDocument])
 def get_knowledge_documents() -> list[KnowledgeDocument]:
+    """查询知识库文档列表。"""
     return list_knowledge_documents()
 
 
 @app.get("/operation-logs", response_model=list[OperationLog])
 def get_operation_logs(limit: int = Query(default=100, ge=1, le=300)) -> list[OperationLog]:
+    """查询运行日志。"""
     return list_operation_logs(limit=limit)
 
 
@@ -287,18 +325,21 @@ def cleanup_logs(
     retention_days: int = Query(default=180, ge=7, le=730),
     scope: str | None = Query(default=None),
 ) -> dict[str, int]:
+    """清理过期运行日志，避免日志无限增长。"""
     deleted = cleanup_operation_logs(retention_days=retention_days, scope=scope)
     return {"deleted": deleted}
 
 
 @app.delete("/emails/workflow-steps/cleanup")
 def cleanup_email_workflow_steps(retention_days: int = Query(default=30, ge=7, le=365)) -> dict[str, int]:
+    """清理邮件 Agent 执行轨迹。"""
     deleted = store.cleanup_workflow_steps(retention_days=retention_days)
     return {"deleted": deleted}
 
 
 @app.post("/knowledge/documents", response_model=KnowledgeDocument)
 def create_knowledge_base_document(payload: KnowledgeDocumentCreate) -> KnowledgeDocument:
+    """手动创建知识库文档。"""
     return create_knowledge_document(payload)
 
 

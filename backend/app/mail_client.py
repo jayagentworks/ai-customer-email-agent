@@ -1,3 +1,13 @@
+"""QQ 邮箱 IMAP/SMTP 接入模块。
+
+这个模块只负责“邮件系统边界”：
+- 通过 IMAP 拉取 QQ 邮箱中的邮件，并解析主题、发件人、正文和附件。
+- 通过 SMTP 发送经过人工确认的回复。
+- 对 MIME 标题、正文编码、附件内容做兼容处理，尽量减少中文乱码。
+
+业务分类、RAG、回复生成不放在这里，避免邮箱协议解析和 Agent 决策耦合。
+"""
+
 import imaplib
 import html
 import os
@@ -23,16 +33,28 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 class MailClientConfigError(Exception):
+    """邮箱配置缺失或无效时抛出的异常。"""
+
     pass
 
 
 @dataclass
 class ImportedMail:
+    """从邮箱服务商拉取到的一封邮件。
+
+    ``provider_message_id`` 用于去重，避免同一封邮件被重复导入系统。
+    """
+
     payload: EmailCreate
     provider_message_id: str
 
 
 def fetch_unread_qq_emails(limit: int = 5, known_message_ids: set[str] | None = None) -> list[ImportedMail]:
+    """从 QQ 邮箱拉取最近的邮件。
+
+    当前默认搜索条件是 ``ALL``，再结合 ``known_message_ids`` 做本地去重。
+    使用 ``BODY.PEEK[]`` 是为了读取邮件内容时不主动改变邮箱中的已读状态。
+    """
     address = required_env("QQ_EMAIL_ADDRESS")
     auth_code = required_env("QQ_EMAIL_AUTH_CODE")
     host = os.getenv("QQ_IMAP_HOST", "imap.qq.com")
@@ -87,6 +109,7 @@ def fetch_unread_qq_emails(limit: int = 5, known_message_ids: set[str] | None = 
 
 
 def fetch_provider_message_id(client: imaplib.IMAP4_SSL, mail_id: bytes) -> str:
+    """读取邮件 Message-ID，作为跨同步批次的稳定去重键。"""
     status, data = client.fetch(mail_id, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
     if status != "OK" or not data:
         return mail_id.decode("utf-8", errors="ignore")
@@ -98,6 +121,7 @@ def fetch_provider_message_id(client: imaplib.IMAP4_SSL, mail_id: bytes) -> str:
 
 
 def send_qq_email(*, to_address: str, subject: str, body: str) -> None:
+    """通过 QQ SMTP 发送纯文本客服回复。"""
     from_address = required_env("QQ_EMAIL_ADDRESS")
     auth_code = required_env("QQ_EMAIL_AUTH_CODE")
     host = os.getenv("QQ_SMTP_HOST", "smtp.qq.com")
@@ -121,6 +145,7 @@ def required_env(name: str) -> str:
 
 
 def decode_mime_text(value: str) -> str:
+    """解析 MIME 编码的邮件标题或发件人名称。"""
     fragments = []
     for payload, charset in decode_header(value):
         if isinstance(payload, bytes):
@@ -131,6 +156,10 @@ def decode_mime_text(value: str) -> str:
 
 
 def extract_plain_text(message: Message) -> str:
+    """从邮件中提取正文文本。
+
+    多段邮件优先使用 text/plain；如果只有 HTML，则去掉标签后转为文本。
+    """
     if message.is_multipart():
         for part in message.walk():
             content_type = part.get_content_type()

@@ -1,3 +1,13 @@
+"""大语言模型客户端。
+
+本模块封装所有 chat/completions 调用：
+- ``analyze_email_with_llm``：用于语义分析，要求模型返回严格 JSON。
+- ``generate_reply_draft_with_llm``：用于生成面向客户的回复草稿。
+
+这样业务流程层不用关心具体模型平台，只要通过环境变量切换 base_url、
+model 和 api key 即可。
+"""
+
 import json
 import os
 from pathlib import Path
@@ -12,6 +22,12 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 class SemanticAnalysisResult(BaseModel):
+    """LLM 语义分析结果的强约束结构。
+
+    使用 Pydantic 校验可以防止模型返回格式漂移，例如 category 拼错、
+    confidence 超出 0-1 范围，或者 risk_level 不在枚举范围内。
+    """
+
     category: Literal["refund", "complaint", "technical", "billing", "product_question", "other"]
     confidence: float = Field(ge=0, le=1)
     risk_level: Literal["low", "medium", "high"]
@@ -25,6 +41,7 @@ class LLMClientError(Exception):
 
 
 def is_llm_configured() -> bool:
+    """检查当前环境是否配置了可用 LLM API Key。"""
     base_url = os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
     return bool(resolve_llm_api_key(base_url))
 
@@ -36,6 +53,11 @@ def analyze_email_with_llm(
     detected_language: str,
     preprocessing_flags: list[str],
 ) -> SemanticAnalysisResult | None:
+    """调用 LLM 做邮件语义分析。
+
+    该调用只负责“判断”，不生成回复。temperature 设置较低，是为了让分类和风险判断
+    尽量稳定；同时要求 JSON 输出，方便工作流节点可靠解析。
+    """
     base_url = os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
     model = os.getenv("LLM_MODEL", "qwen-plus")
     api_key = resolve_llm_api_key(base_url)
@@ -110,6 +132,12 @@ def generate_reply_draft_with_llm(
     knowledge_hits: list[dict],
     variant: str = "default",
 ) -> str | None:
+    """调用 LLM 生成客服回复草稿。
+
+    输入中只传入 Top-K 知识片段和必要邮件上下文，避免把过多无关知识塞进 prompt。
+    系统提示词明确禁止输出 markdown、引用行、chunk id 和内部流程信息，
+    保证草稿更像真实客服回复。
+    """
     base_url = os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
     model = os.getenv("LLM_MODEL", "qwen-plus")
     api_key = resolve_llm_api_key(base_url)

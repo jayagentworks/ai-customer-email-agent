@@ -1,3 +1,10 @@
+"""SQLAlchemy 数据库表模型。
+
+这里定义的是数据库持久化结构，不直接作为接口返回值。
+对外 API 使用 ``models.py`` 中的 Pydantic 模型，仓储层 ``store.py`` 和
+``knowledge.py`` 负责两者之间的转换。
+"""
+
 from datetime import datetime
 from uuid import uuid4
 
@@ -9,6 +16,12 @@ from app.db import Base
 
 
 class EmailORM(Base):
+    """邮件主表。
+
+    一封邮件包含原始正文、分类结果、RAG 命中、回复草稿、成本指标和审核状态。
+    执行轨迹与审核历史拆到子表，避免主表字段过长且便于独立清理。
+    """
+
     __tablename__ = "emails"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -49,6 +62,8 @@ class EmailORM(Base):
 
 
 class WorkflowStepORM(Base):
+    """邮件 Agent 执行轨迹表。"""
+
     __tablename__ = "workflow_steps"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -65,6 +80,8 @@ class WorkflowStepORM(Base):
 
 
 class ReviewActionORM(Base):
+    """人工审核动作记录表。"""
+
     __tablename__ = "review_actions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -78,6 +95,11 @@ class ReviewActionORM(Base):
 
 
 class OperationLogORM(Base):
+    """系统运行日志表。
+
+    记录知识库版本操作、邮箱同步、真实发信、后台处理等跨模块事件。
+    """
+
     __tablename__ = "operation_logs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
@@ -90,6 +112,8 @@ class OperationLogORM(Base):
 
 
 class KnowledgeDocumentORM(Base):
+    """知识库文档主表。"""
+
     __tablename__ = "knowledge_documents"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
@@ -115,6 +139,8 @@ class KnowledgeDocumentORM(Base):
 
 
 class KnowledgeDocumentVersionORM(Base):
+    """知识库文档版本表。"""
+
     __tablename__ = "knowledge_document_versions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
@@ -135,6 +161,12 @@ class KnowledgeDocumentVersionORM(Base):
 
 
 class KnowledgeChunkORM(Base):
+    """知识库 chunk 表。
+
+    ``embedding`` 保存 JSON 向量，``embedding_vector`` 由数据库迁移层添加，
+    用于 pgvector 检索。这里保留 JSON 字段是为了兼容 SQLite 和便于调试。
+    """
+
     __tablename__ = "knowledge_chunks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))

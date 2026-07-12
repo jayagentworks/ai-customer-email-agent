@@ -1,3 +1,11 @@
+"""API 数据模型。
+
+这些 Pydantic 模型是前后端交互的稳定契约：
+- 输入模型用于校验前端提交的数据。
+- 输出模型用于约束接口返回结构。
+- 业务流程内部也复用这些模型，保证 workflow、store、frontend 对字段理解一致。
+"""
+
 from datetime import datetime
 from typing import Literal
 from uuid import uuid4
@@ -12,6 +20,8 @@ KnowledgeDocumentStatus = Literal["processing", "indexed", "failed", "needs_rein
 
 
 class EmailCreate(BaseModel):
+    """创建邮件时的输入结构。"""
+
     customer_name: str = Field(min_length=1)
     customer_email: str = Field(min_length=3)
     subject: str = Field(min_length=1)
@@ -30,6 +40,8 @@ class EmailAttachment(BaseModel):
 
 
 class KnowledgeHit(BaseModel):
+    """RAG 返回的一条知识库依据。"""
+
     title: str
     source: str
     snippet: str
@@ -103,6 +115,8 @@ class KnowledgeSearchRequest(BaseModel):
 
 
 class WorkflowStep(BaseModel):
+    """Agent 工作流中的单个执行步骤。"""
+
     name: str
     status: Literal["complete", "warning", "blocked"]
     summary: str
@@ -112,6 +126,8 @@ class WorkflowStep(BaseModel):
 
 
 class AgentMetrics(BaseModel):
+    """单封邮件的成本与 token 估算指标。"""
+
     llm_calls: int = 0
     semantic_llm_calls: int = 0
     draft_llm_calls: int = 0
@@ -131,6 +147,8 @@ class ReviewActionRecord(BaseModel):
 
 
 class EmailRecord(BaseModel):
+    """系统中完整的一封邮件记录。"""
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     customer_name: str
     customer_email: str

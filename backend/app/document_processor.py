@@ -1,3 +1,16 @@
+"""知识库文件解析与清洗模块。
+
+该模块把不同格式的知识文件统一解析成 ``ParsedDocument``：
+- md/txt：直接读取文本，按类 Markdown 结构切分。
+- pdf：优先读取文本层；没有文本层时使用本地 OCR；表格用 pdfplumber 抽取；
+  图片会保存为资产，并在配置多模态模型时生成图片说明。
+- docx：读取段落和表格，尽量保留标题/段落/表格的结构信息。
+- doc：先通过 LibreOffice 转成 docx，再复用 docx 解析逻辑。
+
+最终输出的 chunk 会进入 RAG 索引，所以这里的目标不是“展示原文排版”，
+而是尽量提取对客服回复有用、结构清晰、噪声较少的知识文本。
+"""
+
 import re
 import shutil
 import subprocess
@@ -10,11 +23,19 @@ from app.vision_client import VisionClientError, describe_image
 
 
 SUPPORTED_KNOWLEDGE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".doc"}
+# PDF 中抽取出来的图片会保存到知识库目录下，方便后续在解析报告中查看，
+# 也方便未来接入多模态 embedding 或视觉模型时复用。
 EXTRACTED_ASSETS_DIR = Path(__file__).resolve().parents[1] / "knowledge_docs" / "extracted_assets"
 
 
 @dataclass
 class ParsedChunk:
+    """解析后的最小知识片段。
+
+    page_number 和 section_title 是可选元数据，用于前端展示“知识库依据”时
+    告诉用户这个片段来自哪一页、哪个章节。
+    """
+
     content: str
     page_number: int | None = None
     section_title: str = ""
@@ -22,6 +43,8 @@ class ParsedChunk:
 
 @dataclass
 class CleanResult:
+    """文本清洗结果，用于生成解析报告。"""
+
     text: str
     original_chars: int
     cleaned_chars: int
@@ -30,6 +53,12 @@ class CleanResult:
 
 @dataclass
 class ParseReport:
+    """文件解析报告。
+
+    报告不会参与 RAG 检索本身，但会展示给用户：解析用了什么 parser、
+    清洗掉多少噪声、识别出多少页/表格/图片，以及是否存在 OCR 或空页警告。
+    """
+
     file_type: str
     parser: str
     original_chars: int = 0
@@ -62,12 +91,15 @@ class ParseReport:
 
 @dataclass
 class ParsedDocument:
+    """统一的文档解析结果。"""
+
     title: str
     chunks: list[ParsedChunk]
     report: ParseReport
 
 
 def parse_document(path: Path) -> ParsedDocument:
+    """根据文件后缀选择对应解析器。"""
     suffix = path.suffix.lower()
     if suffix not in SUPPORTED_KNOWLEDGE_SUFFIXES:
         raise ValueError("Only .md, .txt, .pdf, .docx and .doc knowledge files are supported.")
@@ -81,6 +113,7 @@ def parse_document(path: Path) -> ParsedDocument:
 
 
 def parse_text_document(path: Path) -> ParsedDocument:
+    """解析 md/txt 文本文件。"""
     raw_text = path.read_text(encoding="utf-8-sig")
     clean = clean_text_with_report(raw_text)
     title = extract_title(clean.text, path.stem)
@@ -97,6 +130,13 @@ def parse_text_document(path: Path) -> ParsedDocument:
 
 
 def parse_pdf_document(path: Path) -> ParsedDocument:
+    """解析 PDF 文件。
+
+    策略是“文本层优先，OCR 兜底”：
+    - 如果页面自带可复制文本，直接使用 pypdf 提取，速度快、成本低。
+    - 如果某页没有文本层，则调用本地 Tesseract OCR。
+    - 表格和图片单独抽取为补充 chunk，避免 PDF 普通文本抽取时丢失结构信息。
+    """
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -164,6 +204,7 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
 
 
 def extract_pdf_table_chunks(path: Path) -> tuple[list[ParsedChunk], int]:
+    """用 pdfplumber 提取 PDF 表格并转成 Markdown 表格文本。"""
     try:
         import pdfplumber
     except ImportError:
@@ -191,6 +232,11 @@ def extract_pdf_table_chunks(path: Path) -> tuple[list[ParsedChunk], int]:
 
 
 def pdf_table_to_markdown(table: list[list[str | None]]) -> str:
+    """把 pdfplumber 返回的二维表格转换为 Markdown 表格。
+
+    Markdown 表格虽然不是原始版式，但对 RAG 很友好：列关系清晰，
+    LLM 也容易理解“表头-单元格”的对应关系。
+    """
     rows = [[clean_table_cell(cell) for cell in row] for row in table if row]
     rows = [row for row in rows if any(cell for cell in row)]
     if not rows:
@@ -206,11 +252,19 @@ def pdf_table_to_markdown(table: list[list[str | None]]) -> str:
 
 
 def clean_table_cell(value: str | None) -> str:
+    """清理表格单元格，避免竖线破坏 Markdown 表格结构。"""
     text = clean_inline_text(value or "")
     return text.replace("|", "\\|")
 
 
 def extract_pdf_image_reference_chunks(path: Path) -> tuple[list[ParsedChunk], list[dict]]:
+    """抽取 PDF 中的图片资产，并生成可检索的图片引用 chunk。
+
+    图片不一定包含文字，所以这里不会强行把图片当作 OCR 文本处理：
+    - 先把原图保存下来，解析报告中可以看到图片路径。
+    - 如果配置了多模态模型，则额外生成图片说明，作为 RAG 文本依据。
+    - 如果没有多模态能力，也保留页码和图片引用，方便人工回查。
+    """
     try:
         import fitz
     except ImportError:
@@ -313,6 +367,14 @@ def normalize_image_extension(value: str) -> str:
 
 
 def ocr_pdf_page(path: Path, page_number: int) -> str:
+    """对单页 PDF 做本地 OCR。
+
+    OCR 依赖两个本地命令：
+    - ``pdftoppm``：把 PDF 页面渲染成图片。
+    - ``tesseract``：对渲染后的图片做中英文 OCR。
+
+    如果任一工具不可用或识别失败，返回空字符串，让上层记录 warning。
+    """
     pdftoppm = find_executable("pdftoppm")
     tesseract = find_executable("tesseract")
     if not pdftoppm or not tesseract:
@@ -366,6 +428,11 @@ def ocr_pdf_page(path: Path, page_number: int) -> str:
 
 
 def parse_docx_document(path: Path) -> ParsedDocument:
+    """解析 DOCX 文档。
+
+    段落会按 heading 样式保留章节结构；表格会转成文本块。
+    这样切分时可以优先按章节和段落切，而不是简单按固定字符数硬切。
+    """
     try:
         from docx import Document
     except ImportError as exc:
@@ -413,6 +480,11 @@ def parse_docx_document(path: Path) -> ParsedDocument:
 
 
 def parse_doc_document(path: Path) -> ParsedDocument:
+    """解析 legacy .doc 文件。
+
+    优先用 LibreOffice 转成 docx，因为这种方式能最大程度保留结构。
+    如果转换失败，再尝试从 OLE 二进制流中提取可读字符串作为兜底。
+    """
     conversion_error = ""
     try:
         converted_path = convert_doc_to_docx(path)
@@ -468,6 +540,7 @@ def parse_doc_document(path: Path) -> ParsedDocument:
 
 
 def convert_doc_to_docx(path: Path) -> Path:
+    """调用 LibreOffice/soffice 把 .doc 转换成 .docx。"""
     soffice = find_soffice()
     if not soffice:
         raise ValueError("LibreOffice was not found, so .doc could not be converted to .docx.")
@@ -495,6 +568,11 @@ def convert_doc_to_docx(path: Path) -> Path:
 
 
 def find_soffice() -> Path | None:
+    """查找 LibreOffice 可执行文件。
+
+    Windows 下用户可能安装在 C 盘默认目录，也可能按项目要求安装到 A/B 盘。
+    因此这里先查 PATH，再查几个常见安装路径。
+    """
     found = find_executable("soffice")
     if found:
         return found
@@ -511,6 +589,7 @@ def find_soffice() -> Path | None:
 
 
 def find_executable(name: str) -> Path | None:
+    """从 PATH 中查找命令行工具。"""
     candidates = [name]
     if not name.endswith(".exe"):
         candidates.append(f"{name}.exe")
@@ -522,10 +601,16 @@ def find_executable(name: str) -> Path | None:
 
 
 def clean_text(text: str) -> str:
+    """只返回清洗后的文本，供不需要报告的旧路径使用。"""
     return clean_text_with_report(text).text
 
 
 def clean_text_with_report(text: str) -> CleanResult:
+    """清洗文档文本并统计清洗报告。
+
+    清洗会去掉控制字符、明显乱码行、重复空白和低可读内容。
+    这里保留统计信息，是为了前端能解释“为什么这个文档被切成这些 chunk”。
+    """
     original_chars = len(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     lines = [clean_inline_text(line) for line in text.split("\n")]
@@ -545,6 +630,11 @@ def clean_text_with_report(text: str) -> CleanResult:
 
 
 def extract_readable_strings(data: bytes) -> list[str]:
+    """从 legacy .doc 的二进制流中提取可读文本片段。
+
+    这是 LibreOffice 转换失败后的兜底路径，不能保证完整排版，
+    但可以尽量避免旧 Word 文件完全无法入库。
+    """
     candidates: list[str] = []
     candidates.extend(extract_decoded_runs(data.decode("utf-16le", errors="ignore")))
     candidates.extend(extract_decoded_runs(data.decode("latin-1", errors="ignore")))
@@ -569,6 +659,7 @@ def extract_decoded_runs(text: str) -> list[str]:
 
 
 def readable_ratio(text: str) -> float:
+    """计算一行文本中可读字符占比，用于过滤明显乱码。"""
     if not text:
         return 0.0
     readable_chars = re.findall(r"[\u4e00-\u9fffA-Za-z0-9，。！？、；：,.!?;:'\"()\[\]《》<>/\-_\s]", text)
@@ -576,10 +667,15 @@ def readable_ratio(text: str) -> float:
 
 
 def clean_inline_text(text: str) -> str:
+    """清理单行文本中的连续空白。"""
     return re.sub(r"\s+", " ", text).strip()
 
 
 def is_noise_line(line: str) -> bool:
+    """判断一行是否像噪声。
+
+    过短、可读比例过低、乱码符号过多的行会被过滤，减少 chunk 中的无效内容。
+    """
     if not line:
         return False
     if re.fullmatch(r"[-_—=]{3,}", line):
@@ -592,6 +688,17 @@ def is_noise_line(line: str) -> bool:
 
 
 def split_markdown_like_text(text: str, page_number: int | None = None, max_chars: int = 900, overlap_chars: int = 100) -> list[ParsedChunk]:
+    """结构感知切分入口。
+
+    切分优先级是：
+    1. 先识别章节标题，把文档拆成章节。
+    2. 章节内优先保留段落和表格块。
+    3. 如果块太长，再按行、句子递归切。
+    4. 仍然超长时才按固定字符数兜底。
+
+    ``overlap_chars`` 用来在相邻 chunk 之间保留少量尾部上下文，降低句子被切断后
+    检索缺少上下文的问题。
+    """
     sections = split_into_sections(text)
     chunks: list[ParsedChunk] = []
 
@@ -609,6 +716,7 @@ def split_markdown_like_text(text: str, page_number: int | None = None, max_char
 
 
 def split_into_sections(text: str) -> list[tuple[str, list[str]]]:
+    """根据 Markdown 标题或独立标题块拆分章节。"""
     blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
     sections: list[tuple[str, list[str]]] = []
     current_title = ""
@@ -637,6 +745,7 @@ def split_blocks_recursively(
     max_chars: int,
     overlap_chars: int,
 ) -> list[ParsedChunk]:
+    """对一个章节内的 block 做递归切分并打包成 chunk。"""
     pieces: list[str] = []
     for block in blocks:
         pieces.extend(split_oversized_block(block, max_chars=max_chars))
@@ -650,6 +759,11 @@ def split_blocks_recursively(
 
 
 def split_oversized_block(block: str, max_chars: int) -> list[str]:
+    """切分超长 block。
+
+    这里的顺序体现了“尽量不破坏语义结构”的原则：
+    多行文本先按行切；单行长文本再按句子切；句子仍然过长才按字符硬切。
+    """
     block = block.strip()
     if not block:
         return []
@@ -677,6 +791,7 @@ def split_sentences(text: str) -> list[str]:
 
 
 def pack_text_units(units: list[str], max_chars: int) -> list[str]:
+    """把句子/短文本单元重新打包到 max_chars 附近。"""
     packed: list[str] = []
     current = ""
     for unit in units:
@@ -705,6 +820,7 @@ def join_sentence_units(left: str, right: str) -> str:
 
 
 def split_by_chars(text: str, max_chars: int) -> list[str]:
+    """最后兜底的固定字符切分。"""
     return [text[index : index + max_chars].strip() for index in range(0, len(text), max_chars) if text[index : index + max_chars].strip()]
 
 
@@ -715,6 +831,11 @@ def pack_chunk_pieces(
     max_chars: int,
     overlap_chars: int,
 ) -> list[ParsedChunk]:
+    """把切分后的 pieces 组装成最终 ParsedChunk。
+
+    组装时会尽量把短段落合并，避免 chunk 过碎；当长度超限时再开新 chunk，
+    并把上一个 chunk 的尾部作为 overlap 拼到新 chunk 前面。
+    """
     chunks: list[ParsedChunk] = []
     current = ""
 
@@ -740,10 +861,12 @@ def pack_chunk_pieces(
 
 
 def count_sections(chunks: list[ParsedChunk]) -> int:
+    """统计解析结果中识别到的章节数量。"""
     return len({chunk.section_title for chunk in chunks if chunk.section_title})
 
 
 def tail_overlap(text: str, overlap_chars: int) -> str:
+    """截取 chunk 尾部重叠文本，优先从句子边界开始。"""
     if overlap_chars <= 0 or len(text) <= overlap_chars:
         return ""
     tail = text[-overlap_chars:].strip()

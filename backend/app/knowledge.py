@@ -1,3 +1,15 @@
+"""知识库管理与 RAG 检索模块。
+
+本模块负责把企业知识文件从“上传/手动录入”变成“可检索的知识片段”：
+1. 文件入库前会做强去重和弱去重，避免重复文档污染检索结果。
+2. 文档解析后会被清洗、切分成 chunk，并生成 embedding。
+3. chunk 会同时存到 PostgreSQL 普通字段和 pgvector 向量字段中。
+4. 邮件处理时先用 pgvector 快速召回候选，再用语义、关键词、分类三类分数重排。
+
+这里没有直接把所有候选都交给 LLM，是为了控制 token 成本，并降低无关知识
+进入上下文后造成幻觉的概率。
+"""
+
 import hashlib
 import json
 import re
@@ -30,6 +42,12 @@ PROCESSING_MESSAGE = "正在解析文件、切分文本并生成向量索引。"
 
 @dataclass
 class DuplicateCandidate:
+    """重复文档候选。
+
+    强去重和弱去重都只把“疑似重复对象”记录成这个结构，真正是否阻止上传
+    由调用方根据策略决定。
+    """
+
     id: str
     title: str
     source: str
@@ -38,6 +56,12 @@ class DuplicateCandidate:
 
 @dataclass
 class UploadPrecheck:
+    """上传前预检查结果。
+
+    strong_duplicates：内容哈希完全一致，基本可以认为是同一份文档。
+    weak_duplicates：内容高度相似、文件名相同或标题接近，需要提示用户确认。
+    """
+
     title: str
     content_hash: str
     strong_duplicates: list[DuplicateCandidate]
@@ -45,6 +69,11 @@ class UploadPrecheck:
 
 
 def ingest_knowledge_documents() -> list[KnowledgeDocument]:
+    """扫描默认知识库目录并批量入库。
+
+    这个接口主要用于初始化或重新索引：把 ``backend/knowledge_docs`` 下面
+    已存在的 md/txt/pdf/docx/doc 文件统一解析并写入数据库。
+    """
     init_db()
     KNOWLEDGE_DOCS_DIR.mkdir(parents=True, exist_ok=True)
     documents: list[KnowledgeDocument] = []
@@ -58,6 +87,11 @@ def ingest_knowledge_documents() -> list[KnowledgeDocument]:
 
 
 def create_knowledge_document(payload: KnowledgeDocumentCreate) -> KnowledgeDocument:
+    """创建手动录入的知识库文档。
+
+    手动录入会落成一个 markdown 文件，然后复用 ``upsert_document`` 走同一套
+    解析、切分、embedding、版本记录逻辑，避免“上传文档”和“手敲内容”两套索引路径不一致。
+    """
     init_db()
     target_dir = KNOWLEDGE_DOCS_DIR / "custom"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -92,6 +126,12 @@ def create_knowledge_document_upload_job(filename: str, content: bytes) -> Knowl
 
 
 def create_knowledge_document_upload_job_with_duplicate_policy(filename: str, content: bytes, force_weak_duplicate: bool = False) -> KnowledgeDocument:
+    """创建上传任务，并应用强/弱去重策略。
+
+    - 强去重命中：直接拒绝，因为内容完全一致。
+    - 弱去重命中：默认提醒用户；如果前端传入 ``force_weak_duplicate``，
+      表示用户已确认仍然入库。
+    """
     init_db()
     precheck = precheck_uploaded_knowledge_file(filename, content)
     ensure_upload_not_duplicate(precheck, force_weak_duplicate=force_weak_duplicate)
@@ -107,6 +147,11 @@ def update_knowledge_document_from_upload(
     content: bytes,
     force_weak_duplicate: bool = False,
 ) -> KnowledgeDocument:
+    """用上传文件更新已有知识库文档。
+
+    这里会先排除当前文档自身，再执行弱去重检查，避免“上传当前文档的新版本”
+    被误判为与自己重复。真正写入后仍然通过 ``upsert_document`` 创建版本快照。
+    """
     init_db()
     with SessionLocal() as session:
         row = session.get(KnowledgeDocumentORM, document_id)
@@ -124,6 +169,11 @@ def update_knowledge_document_from_upload(
 
 
 def index_knowledge_document(document_id: str) -> None:
+    """后台索引单个知识库文档。
+
+    上传接口会先创建一条“处理中”的文档记录，随后由后台任务调用本函数。
+    这样前端不会因为大文件解析、OCR 或 embedding 调用而长时间卡住。
+    """
     init_db()
     try:
         with SessionLocal() as session:
@@ -142,6 +192,11 @@ def index_knowledge_document(document_id: str) -> None:
 
 
 def save_uploaded_knowledge_file(filename: str, content: bytes) -> Path:
+    """保存上传的原始知识文件。
+
+    原文件保留下来是为了支持后续重新索引、版本回退和解析报告复查。
+    文件名会做安全化处理，避免路径穿越和特殊字符导致的跨平台问题。
+    """
     original_name = Path(filename).name
     suffix = Path(original_name).suffix.lower()
     if suffix not in SUPPORTED_KNOWLEDGE_SUFFIXES:
@@ -159,6 +214,7 @@ def save_uploaded_knowledge_file(filename: str, content: bytes) -> Path:
 
 
 def unique_upload_path(path: Path) -> Path:
+    """为同名上传文件生成不冲突的保存路径。"""
     if not path.exists():
         return path
     for index in range(2, 1000):
@@ -169,6 +225,12 @@ def unique_upload_path(path: Path) -> Path:
 
 
 def precheck_uploaded_knowledge_file(filename: str, content: bytes, exclude_weak_document_id: str | None = None) -> UploadPrecheck:
+    """上传前解析并计算重复度。
+
+    强去重使用 SHA-256：只要清洗后的正文完全一样，哈希值就完全一致。
+    弱去重使用文本 shingle 相似度：即使用户改了文件名、调整了少量文字，
+    只要主体内容高度相似，也会提醒用户可能已经入库。
+    """
     original_name = Path(filename).name
     suffix = Path(original_name).suffix.lower()
     if suffix not in SUPPORTED_KNOWLEDGE_SUFFIXES:
@@ -223,6 +285,7 @@ def precheck_uploaded_knowledge_file(filename: str, content: bytes, exclude_weak
 
 
 def ensure_upload_not_duplicate(precheck: UploadPrecheck, force_weak_duplicate: bool = False) -> None:
+    """根据预检查结果决定是否允许继续上传。"""
     if precheck.strong_duplicates:
         candidate = precheck.strong_duplicates[0]
         raise ValueError(f"强去重命中：该文件内容已入库，现有文档「{candidate.title}」（{candidate.source}）。")
@@ -232,15 +295,22 @@ def ensure_upload_not_duplicate(precheck: UploadPrecheck, force_weak_duplicate: 
 
 
 def normalize_duplicate_key(value: str) -> str:
+    """归一化标题/文件名，用于弱去重的近似比较。"""
     return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", value.lower())
 
 
 def normalize_content_for_similarity(value: str) -> str:
+    """归一化正文内容，去掉空白和标点，保留中英文与数字主体。"""
     compact = re.sub(r"\s+", "", value.lower())
     return re.sub(r"[^\w\u4e00-\u9fff]+", "", compact)
 
 
 def build_text_shingles(value: str, size: int = 12) -> set[str]:
+    """把文本切成固定长度片段，用于弱去重相似度计算。
+
+    例如一篇文档只改了一个字，大多数 shingle 仍然会重合，因此相似度仍然很高。
+    这比只比较文件名或标题更可靠。
+    """
     if not value:
         return set()
     if len(value) <= size:
@@ -249,6 +319,11 @@ def build_text_shingles(value: str, size: int = 12) -> set[str]:
 
 
 def content_similarity(upload_key: str, existing_key: str, upload_shingles: set[str]) -> float:
+    """计算上传文档与已有文档的内容相似度。
+
+    先处理“短文本完全包含在长文本里”的场景，再用 Jaccard 形式比较 shingle
+    集合重合比例。返回值越接近 1，说明两份文档越相似。
+    """
     if not upload_key or not existing_key:
         return 0.0
     shorter, longer = sorted((upload_key, existing_key), key=len)
@@ -303,6 +378,11 @@ def get_knowledge_document(document_id: str) -> KnowledgeDocumentDetail | None:
 
 
 def update_knowledge_document(document_id: str, payload: KnowledgeDocumentUpdate) -> KnowledgeDocument:
+    """更新知识库正文，并生成新版本。
+
+    这里会覆盖源文件并重新走 ``upsert_document``。版本快照由 upsert 统一创建，
+    因此修改、上传新版本、回退后的重新索引都能保持相同的版本语义。
+    """
     init_db()
     with SessionLocal() as session:
         row = session.get(KnowledgeDocumentORM, document_id)
@@ -320,6 +400,7 @@ def update_knowledge_document(document_id: str, payload: KnowledgeDocumentUpdate
 
 
 def reindex_knowledge_document(document_id: str) -> KnowledgeDocument:
+    """重新解析并索引已有知识库文档。"""
     init_db()
     with SessionLocal() as session:
         row = session.get(KnowledgeDocumentORM, document_id)
@@ -335,6 +416,12 @@ def reindex_knowledge_document(document_id: str) -> KnowledgeDocument:
 
 
 def restore_knowledge_document_version(document_id: str, version_id: str) -> KnowledgeDocument:
+    """回退到指定历史版本。
+
+    当前实现采用“恢复为目标版本，并删除目标版本之后的版本记录”的语义，
+    这样用户界面中不会出现回退后版本号继续膨胀的问题。回退行为会写入运行日志，
+    方便审计。
+    """
     init_db()
     with SessionLocal() as session:
         row = session.get(KnowledgeDocumentORM, document_id)
@@ -388,6 +475,11 @@ def restore_knowledge_document_version(document_id: str, version_id: str) -> Kno
 
 
 def delete_knowledge_document_version(document_id: str, version_id: str) -> None:
+    """删除某个历史版本。
+
+    当前版本不能直接删除，避免用户把正在使用的知识内容删掉后导致检索依据消失。
+    如果需要替换当前版本，应先回退到其他版本，再删除旧历史版本。
+    """
     init_db()
     with SessionLocal() as session:
         document = session.get(KnowledgeDocumentORM, document_id)
@@ -421,6 +513,7 @@ def delete_knowledge_document_version(document_id: str, version_id: str) -> None
 
 
 def delete_knowledge_document(document_id: str) -> None:
+    """删除知识库文档及其数据库记录。"""
     init_db()
     source = ""
     with SessionLocal() as session:
@@ -437,6 +530,15 @@ def delete_knowledge_document(document_id: str) -> None:
 
 
 def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -> list[KnowledgeHit]:
+    """RAG 检索入口。
+
+    检索分两步：
+    1. 用 pgvector 根据邮件 query embedding 召回一批候选 chunk。
+    2. 在应用层做轻量重排：语义分 55%、关键词分 30%、分类分 15%。
+
+    这里默认返回 Top-3，是因为回复生成真正需要的是少量高质量依据。
+    Top-K 太大虽然召回更宽，但会增加 token 成本，也更容易把无关知识塞给 LLM。
+    """
     init_db()
     ensure_default_documents()
     backfill_pgvector_embeddings()
@@ -493,6 +595,11 @@ def search_knowledge(query: str, category: str | None = None, limit: int = 5) ->
 
 
 def normalize_embedding_dimensions(expected_dimensions: int, limit: int = 100) -> None:
+    """修复历史 chunk 的 embedding 维度不一致问题。
+
+    如果切换过 embedding 模型，旧 chunk 的向量维度可能和新 query 向量不一致。
+    pgvector 在维度不一致时无法正确比较，因此这里会检测并重算一批不匹配的向量。
+    """
     if expected_dimensions <= 0:
         return
 
@@ -526,6 +633,7 @@ def normalize_embedding_dimensions(expected_dimensions: int, limit: int = 100) -
 
 
 def embedding_dimensions(embedding: object) -> int:
+    """兼容 JSON 字符串和 Python list 两种历史存储形态，返回向量维度。"""
     if isinstance(embedding, str):
         try:
             embedding = json.loads(embedding)
@@ -537,14 +645,21 @@ def embedding_dimensions(embedding: object) -> int:
 
 
 def pgvector_enabled() -> bool:
+    """判断当前数据库是否支持 pgvector 检索。"""
     return engine.dialect.name == "postgresql"
 
 
 def vector_literal(vector: list[float]) -> str:
+    """把 Python 向量序列化为 pgvector 可接收的文本形式。"""
     return json.dumps([round(float(value), 6) for value in vector], separators=(",", ":"))
 
 
 def pgvector_candidate_ids(query_embedding: list[float], category: str | None, limit: int) -> list[str]:
+    """使用 pgvector 从数据库侧召回候选 chunk id。
+
+    数据库只负责做高效向量近邻召回；最终排序仍在 Python 侧融合关键词和分类分数。
+    这样既利用了 pgvector 的索引能力，又保留了业务可解释的混合检索逻辑。
+    """
     if not pgvector_enabled() or not query_embedding:
         return []
 
