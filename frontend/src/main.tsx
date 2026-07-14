@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const API_URL = "http://localhost:8010";
+const API_URL = "/api";
 
 // 前后端共享的枚举类型。这里用 TypeScript union 限制状态值，避免 UI 写错状态字符串。
 type Locale = "en" | "zh";
