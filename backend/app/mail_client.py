@@ -158,24 +158,33 @@ def decode_mime_text(value: str) -> str:
 def extract_plain_text(message: Message) -> str:
     """从邮件中提取正文文本。
 
-    多段邮件优先使用 text/plain；如果只有 HTML，则去掉标签后转为文本。
+    多段邮件会同时收集 text/plain 和 text/html 候选，然后按解码质量评分选择
+    最可靠的一版。这样可以避免“第一段 text/plain 是乱码，但 HTML 正文正常”
+    时提前返回错误内容。
     """
+    candidates: list[tuple[int, str]] = []
     if message.is_multipart():
         for part in message.walk():
             content_type = part.get_content_type()
             disposition = part.get_content_disposition()
-            if content_type == "text/plain" and disposition != "attachment":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    text = clean_email_text(repair_mojibake_text(decode_bytes(payload, part.get_content_charset()).strip()))
-                    if text:
-                        return text
+            if disposition == "attachment" or content_type not in {"text/plain", "text/html"}:
+                continue
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            text = clean_email_text(decode_bytes(payload, part.get_content_charset()))
+            if text:
+                candidates.append((score_email_text(text, content_type), text))
     else:
         payload = message.get_payload(decode=True)
         if payload:
-            text = clean_email_text(repair_mojibake_text(decode_bytes(payload, message.get_content_charset()).strip()))
+            text = clean_email_text(decode_bytes(payload, message.get_content_charset()))
             if text:
                 return text
+
+    if candidates:
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
 
     return "(empty email body)"
 
@@ -200,29 +209,30 @@ def decode_bytes(payload: bytes, charset: str | None = None) -> str:
     best_score = -1
     for candidate in candidates:
         try:
-            text = payload.decode(candidate, errors="strict")
+            decoded = payload.decode(candidate, errors="strict")
         except (LookupError, UnicodeDecodeError):
             continue
+        text = repair_mojibake_text(decoded)
         score = score_decoded_text(text)
         if score > best_score:
             best_text = text
             best_score = score
     if best_text:
         return best_text
-    return payload.decode("utf-8", errors="ignore")
+    return repair_mojibake_text(payload.decode("utf-8", errors="replace"))
 
 
 def repair_mojibake_text(text: str) -> str:
     if not text:
         return text
     best_text = text
-    best_score = score_decoded_text(text) - mojibake_score(text) * 30 - utf16_ascii_pair_score(text) * 80
-    for source_encoding in ("utf-16le", "gb18030", "gbk", "latin-1"):
+    best_score = score_decoded_text(text)
+    for source_encoding in ("utf-16le", "gb18030", "gbk", "big5", "latin-1", "cp1252"):
         try:
             candidate = text.encode(source_encoding).decode("utf-8")
         except (UnicodeEncodeError, UnicodeDecodeError):
             continue
-        score = score_decoded_text(candidate) - mojibake_score(candidate) * 30 - utf16_ascii_pair_score(candidate) * 80
+        score = score_decoded_text(candidate)
         if score > best_score + 10:
             best_text = candidate
             best_score = score
@@ -230,8 +240,17 @@ def repair_mojibake_text(text: str) -> str:
 
 
 def mojibake_score(text: str) -> int:
-    markers = "锟鏁鏂鎬浣犳煡鐪嬶細鏉℃柊閫氱煡鏈夊姩洿扮瓑"
-    return sum(text.count(marker) for marker in markers)
+    markers = (
+        "锟", "閿", "�", "Ã", "Â", "¤", "¥", "¢", "ä", "å", "æ", "ç", "è", "é", "½", "¡",
+        "浣", "犲", "ソ",
+        "鏂", "鎬", "煡", "鐪", "閫", "氱", "洿", "规", "嵁", "涓", "湪",
+        "娆", "瀹", "㈡", "湇", "绛", "伐", "佷", "叆", "妯",
+    )
+    marker_score = sum(text.count(marker) for marker in markers)
+    latin1_run_score = len(re.findall(r"[ÃÂ][\x80-\xffA-Za-z]{1,}", text))
+    utf8_as_latin1_score = len(re.findall(r"[äåæçèé][\x80-\xffA-Za-z]{1,}", text))
+    cjk_mojibake_run_score = len(re.findall(r"[浣犲ソ鏂鎬煡鐪嬫湁涓侀氱洿规嵁瀹㈡湇]{2,}", text))
+    return marker_score + latin1_run_score * 3 + utf8_as_latin1_score * 3 + cjk_mojibake_run_score * 2
 
 
 def utf16_ascii_pair_score(text: str) -> int:
@@ -266,10 +285,17 @@ def score_decoded_text(text: str) -> int:
     replacement_penalty = text.count("�") * 20 + text.count("\x00") * 10
     question_run_penalty = text.count("????") * 10
     utf16_pair_penalty = utf16_ascii_pair_score(text) * 80
+    mojibake_penalty = mojibake_score(text) * 35
     chinese_bonus = sum(1 for char in text if "\u4e00" <= char <= "\u9fff") * 2
     readable_bonus = sum(1 for char in text if char.isprintable() or char in "\r\n\t")
     ascii_bonus = sum(1 for char in text if char.isascii() and (char.isalnum() or char in " .,;:/-_@<>")) * 2
-    return readable_bonus + chinese_bonus + ascii_bonus - replacement_penalty - question_run_penalty - utf16_pair_penalty
+    return readable_bonus + chinese_bonus + ascii_bonus - replacement_penalty - question_run_penalty - utf16_pair_penalty - mojibake_penalty
+
+
+def score_email_text(text: str, content_type: str) -> int:
+    text_type_bonus = 50 if content_type == "text/plain" else 0
+    length_bonus = min(len(text), 1000) // 10
+    return score_decoded_text(text) + text_type_bonus + length_bonus
 
 
 def extract_attachments(message: Message) -> list[EmailAttachment]:

@@ -295,10 +295,16 @@ def is_corrupted_text(value: str | None) -> bool:
     if not text:
         return False
     question_count = text.count("?")
+    mojibake_markers = (
+        "锟", "閿", "�", "Ã", "Â", "浣", "犲", "ソ", "鏂", "鎬", "煡", "鐪",
+        "閫", "氱", "洿", "规", "嵁", "涓", "湪", "瀹", "㈡", "湇",
+    )
+    marker_count = sum(text.count(marker) for marker in mojibake_markers)
     return (
         text == "�"
         or "�" in text
         or "????" in text
         or "锟" in text
+        or marker_count >= 3
         or question_count / max(len(text), 1) > 0.25
     )
