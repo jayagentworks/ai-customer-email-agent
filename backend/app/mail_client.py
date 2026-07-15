@@ -204,6 +204,14 @@ def clean_email_text(text: str) -> str:
 
 
 def decode_bytes(payload: bytes, charset: str | None = None) -> str:
+    # Modern providers overwhelmingly send UTF-8. Prefer a strict UTF-8
+    # decode before comparing permissive legacy codecs: the same byte stream
+    # can be valid GBK/Big5 too, but decode into meaningless private-use text.
+    try:
+        return repair_mojibake_text(payload.decode("utf-8", errors="strict"))
+    except UnicodeDecodeError:
+        pass
+
     candidates = normalize_charset_candidates(charset)
     best_text = ""
     best_score = -1

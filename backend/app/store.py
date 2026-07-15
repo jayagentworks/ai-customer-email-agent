@@ -300,11 +300,15 @@ def is_corrupted_text(value: str | None) -> bool:
         "閫", "氱", "洿", "规", "嵁", "涓", "湪", "瀹", "㈡", "湇",
     )
     marker_count = sum(text.count(marker) for marker in mojibake_markers)
+    control_count = sum(1 for char in text if "\x80" <= char <= "\x9f")
+    private_use_count = sum(1 for char in text if "\ue000" <= char <= "\uf8ff")
     return (
         text == "�"
         or "�" in text
         or "????" in text
         or "锟" in text
         or marker_count >= 3
+        or control_count >= 2
+        or private_use_count >= 2
         or question_count / max(len(text), 1) > 0.25
     )
