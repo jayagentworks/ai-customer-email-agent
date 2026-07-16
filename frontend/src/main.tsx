@@ -935,8 +935,9 @@ function App() {
 
   async function review(action: "approve" | "escalate" | "revise" | "undo_escalate", note = "", revisedReply = "") {
     // 所有人工审核动作都走同一个接口，后端负责更新状态和记录审核历史。
-    if (!selected) return;
-    const response = await apiFetch(`${API_URL}/emails/${selected.id}/review`, {
+    const target = activeView === "review" ? selectedReview : selected;
+    if (!target) return;
+    const response = await apiFetch(`${API_URL}/emails/${target.id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
