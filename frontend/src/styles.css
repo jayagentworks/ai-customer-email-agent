@@ -17,6 +17,40 @@ body {
   min-width: 320px;
 }
 
+.authShell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #eef2f5;
+}
+
+.authCard {
+  width: min(420px, 100%);
+  border: 1px solid #d7e0e8;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 24px;
+  box-shadow: 0 18px 60px rgba(23, 32, 38, 0.08);
+}
+
+.authBrand {
+  margin-bottom: 22px;
+}
+
+.authError {
+  margin: 0 0 12px;
+  color: #9f2626;
+  font-weight: 700;
+}
+
+.authHint {
+  margin: 12px 0 0;
+  color: #60717f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 button,
 input,
 textarea {
@@ -102,6 +136,35 @@ button {
   /* 模块入口采用纵向列表，当前模块用浅蓝背景提示。 */
   display: grid;
   gap: 6px;
+}
+
+.userPanel {
+  border: 1px solid #dfe5ea;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.userPanel strong,
+.userPanel span {
+  display: block;
+}
+
+.userPanel span {
+  color: #60717f;
+  font-size: 13px;
+}
+
+.userPanel button {
+  margin-top: 4px;
+  border: 1px solid #cdd6de;
+  border-radius: 6px;
+  background: #fbfcfd;
+  color: #174a7c;
+  min-height: 32px;
+  font-weight: 700;
 }
 
 .navItem {

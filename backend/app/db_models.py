@@ -61,6 +61,30 @@ class EmailORM(Base):
     )
 
 
+class UserORM(Base):
+    """后台用户表。
+
+    企业后台需要知道“谁在操作系统”。这里先实现最小可用的 RBAC 账号模型：
+    - admin：系统管理员，拥有全部权限。
+    - manager：客服主管，可审核邮件、管理知识库和查看日志。
+    - agent：客服人员，可处理邮件和审核队列中的日常操作。
+
+    密码不会明文保存，``password_hash`` 存储的是 PBKDF2 派生后的哈希字符串。
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120), default="")
+    role: Mapped[str] = mapped_column(String(32), default="agent", index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class WorkflowStepORM(Base):
     """邮件 Agent 执行轨迹表。"""
 

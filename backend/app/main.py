@@ -9,9 +9,20 @@
 和 ``store.py``，这样接口层保持薄而清晰。
 """
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import (
+    CurrentUser,
+    LoginRequest,
+    LoginResponse,
+    UserProfile,
+    authenticate_user,
+    create_access_token,
+    ensure_default_users,
+    require_roles,
+    to_profile,
+)
 from app.knowledge import (
     cleanup_operation_logs,
     create_knowledge_document,
@@ -49,11 +60,12 @@ from app.store import EmailStore
 from app.workflow import process_email, regenerate_draft_reply, sanitize_customer_reply
 
 app = FastAPI(title="Customer Email Agent API")
+ensure_default_users()
 
 # 本项目的前端是本地 Vite 应用，因此只开放本地开发端口的跨域访问。
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,17 +80,46 @@ def health() -> dict[str, str]:
     return {"message": "Customer Email Agent API is alive"}
 
 
+@app.post("/auth/login", response_model=LoginResponse)
+def login(payload: LoginRequest) -> LoginResponse:
+    """账号密码登录，返回前端后续请求使用的 Bearer Token。"""
+    user = authenticate_user(payload.username, payload.password)
+    if not user:
+        record_operation_log(
+            scope="auth",
+            action="login_failed",
+            title=payload.username,
+            summary=f"用户 {payload.username} 登录失败。",
+            detail={"username": payload.username},
+        )
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    record_operation_log(
+        scope="auth",
+        action="login_success",
+        title=user.username,
+        summary=f"用户 {user.username} 登录成功。",
+        detail={"user_id": user.id, "username": user.username, "role": user.role},
+    )
+    return LoginResponse(access_token=create_access_token(user), user=to_profile(user))
+
+
+@app.get("/auth/me", response_model=UserProfile)
+def get_me(current_user: CurrentUser) -> UserProfile:
+    """返回当前登录用户信息，前端据此控制菜单和按钮权限。"""
+    return to_profile(current_user)
+
+
 # ------------------------- 邮件处理接口 -------------------------
 
 
 @app.get("/emails", response_model=list[EmailRecord])
-def list_emails() -> list[EmailRecord]:
+def list_emails(_: CurrentUser) -> list[EmailRecord]:
     """返回系统中的邮件列表。"""
     return store.list()
 
 
 @app.get("/emails/{email_id}", response_model=EmailRecord)
-def get_email(email_id: str) -> EmailRecord:
+def get_email(email_id: str, _: CurrentUser) -> EmailRecord:
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -86,7 +127,7 @@ def get_email(email_id: str) -> EmailRecord:
 
 
 @app.post("/emails/process", response_model=EmailRecord)
-def create_and_process_email(payload: EmailCreate) -> EmailRecord:
+def create_and_process_email(payload: EmailCreate, current_user: CurrentUser) -> EmailRecord:
     """创建一封邮件并立即执行 Agent 工作流。"""
     email = store.create(payload)
     processed = process_email(email)
@@ -97,6 +138,8 @@ def create_and_process_email(payload: EmailCreate) -> EmailRecord:
         title=saved.subject,
         summary=f"邮件「{saved.subject}」已完成 Agent 分类、检索和回复草稿生成。",
         detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
             "email_id": saved.id,
             "customer_email": saved.customer_email,
             "category": saved.category,
@@ -109,7 +152,7 @@ def create_and_process_email(payload: EmailCreate) -> EmailRecord:
 
 
 @app.post("/emails/{email_id}/review", response_model=EmailRecord)
-def review_email(email_id: str, payload: ReviewAction) -> EmailRecord:
+def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser) -> EmailRecord:
     """人工审核邮件草稿。
 
     审核动作包括通过、要求修改、升级处理和撤销升级。每次审核都会写入
@@ -142,6 +185,8 @@ def review_email(email_id: str, payload: ReviewAction) -> EmailRecord:
         title=email.subject,
         summary=f"邮件「{email.subject}」审核动作为 {payload.action}，当前状态为 {saved.status}。",
         detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
             "email_id": email.id,
             "customer_email": email.customer_email,
             "action": payload.action,
@@ -153,7 +198,7 @@ def review_email(email_id: str, payload: ReviewAction) -> EmailRecord:
 
 
 @app.post("/emails/{email_id}/draft/regenerate", response_model=EmailRecord)
-def regenerate_email_draft(email_id: str) -> EmailRecord:
+def regenerate_email_draft(email_id: str, current_user: CurrentUser) -> EmailRecord:
     """重新生成当前邮件的回复草稿。"""
     email = store.get(email_id)
     if not email:
@@ -168,6 +213,8 @@ def regenerate_email_draft(email_id: str) -> EmailRecord:
         title=email.subject,
         summary=f"邮件「{email.subject}」已重新生成回复草稿。",
         detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
             "email_id": email.id,
             "customer_email": email.customer_email,
             "status": saved.status,
@@ -177,7 +224,7 @@ def regenerate_email_draft(email_id: str) -> EmailRecord:
 
 
 @app.post("/mail/qq/import")
-def import_qq_mail(background_tasks: BackgroundTasks, limit: int = Query(default=10, ge=1, le=50)) -> dict:
+def import_qq_mail(background_tasks: BackgroundTasks, current_user: CurrentUser, limit: int = Query(default=10, ge=1, le=50)) -> dict:
     """同步 QQ 邮箱并把新邮件加入后台处理队列。
 
     接口返回时不一定已经完成 Agent 分析，因为每封新邮件会通过 BackgroundTasks
@@ -213,6 +260,8 @@ def import_qq_mail(background_tasks: BackgroundTasks, limit: int = Query(default
         title="QQ 邮箱同步",
         summary=f"QQ 邮箱同步完成，新增 {len(queued_emails)} 封邮件进入后台 Agent 处理。",
         detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
             "requested_limit": limit,
             "queued_count": len(queued_emails),
             "skipped_count": skipped_count,
@@ -250,7 +299,7 @@ def process_imported_email(email_id: str) -> None:
 
 
 @app.delete("/mail/qq/corrupted")
-def delete_corrupted_qq_mail() -> dict[str, int]:
+def delete_corrupted_qq_mail(current_user: CurrentUser) -> dict[str, int]:
     """清理历史乱码邮件记录，方便重新从邮箱同步。"""
     deleted_count = store.delete_corrupted_provider_messages("qq")
     record_operation_log(
@@ -259,6 +308,8 @@ def delete_corrupted_qq_mail() -> dict[str, int]:
         title="QQ 邮箱乱码清理",
         summary=f"已清理 {deleted_count} 封已损坏编码的 QQ 邮件记录，可重新同步原邮件。",
         detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
             "deleted_count": deleted_count,
             "provider": "qq",
         },
@@ -267,7 +318,7 @@ def delete_corrupted_qq_mail() -> dict[str, int]:
 
 
 @app.post("/emails/{email_id}/send", response_model=EmailRecord)
-def send_email_reply(email_id: str) -> EmailRecord:
+def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
     """发送经过人工确认的回复。
 
     只有 ``ready_to_send`` 状态的邮件允许发送，防止低置信度或未审核草稿被误发。
@@ -299,6 +350,8 @@ def send_email_reply(email_id: str) -> EmailRecord:
         title=email.subject,
         summary=f"邮件「{email.subject}」已通过 QQ SMTP 发送回复。",
         detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
             "email_id": email.id,
             "to": email.customer_email,
             "subject": f"Re: {email.subject}",
@@ -309,13 +362,13 @@ def send_email_reply(email_id: str) -> EmailRecord:
 
 
 @app.get("/knowledge/documents", response_model=list[KnowledgeDocument])
-def get_knowledge_documents() -> list[KnowledgeDocument]:
+def get_knowledge_documents(_: UserProfile = Depends(require_roles(["admin", "manager"]))) -> list[KnowledgeDocument]:
     """查询知识库文档列表。"""
     return list_knowledge_documents()
 
 
 @app.get("/operation-logs", response_model=list[OperationLog])
-def get_operation_logs(limit: int = Query(default=100, ge=1, le=300)) -> list[OperationLog]:
+def get_operation_logs(_: UserProfile = Depends(require_roles(["admin", "manager"])), limit: int = Query(default=100, ge=1, le=300)) -> list[OperationLog]:
     """查询运行日志。"""
     return list_operation_logs(limit=limit)
 
@@ -324,27 +377,44 @@ def get_operation_logs(limit: int = Query(default=100, ge=1, le=300)) -> list[Op
 def cleanup_logs(
     retention_days: int = Query(default=180, ge=7, le=730),
     scope: str | None = Query(default=None),
+    current_user=Depends(require_roles(["admin"])),
 ) -> dict[str, int]:
     """清理过期运行日志，避免日志无限增长。"""
     deleted = cleanup_operation_logs(retention_days=retention_days, scope=scope)
+    record_operation_log(
+        scope="system",
+        action="cleanup_operation_logs",
+        title="清理运行日志",
+        summary=f"用户 {current_user.username} 清理了 {deleted} 条运行日志。",
+        detail={"operator": current_user.username, "operator_role": current_user.role, "deleted": deleted, "retention_days": retention_days, "scope": scope},
+    )
     return {"deleted": deleted}
 
 
 @app.delete("/emails/workflow-steps/cleanup")
-def cleanup_email_workflow_steps(retention_days: int = Query(default=30, ge=7, le=365)) -> dict[str, int]:
+def cleanup_email_workflow_steps(retention_days: int = Query(default=30, ge=7, le=365), current_user=Depends(require_roles(["admin"]))) -> dict[str, int]:
     """清理邮件 Agent 执行轨迹。"""
     deleted = store.cleanup_workflow_steps(retention_days=retention_days)
+    record_operation_log(
+        scope="system",
+        action="cleanup_workflow_steps",
+        title="清理邮件 Agent 轨迹",
+        summary=f"用户 {current_user.username} 清理了 {deleted} 条邮件 Agent 轨迹。",
+        detail={"operator": current_user.username, "operator_role": current_user.role, "deleted": deleted, "retention_days": retention_days},
+    )
     return {"deleted": deleted}
 
 
 @app.post("/knowledge/documents", response_model=KnowledgeDocument)
-def create_knowledge_base_document(payload: KnowledgeDocumentCreate) -> KnowledgeDocument:
+def create_knowledge_base_document(payload: KnowledgeDocumentCreate, current_user=Depends(require_roles(["admin", "manager"]))) -> KnowledgeDocument:
     """手动创建知识库文档。"""
-    return create_knowledge_document(payload)
+    document = create_knowledge_document(payload)
+    record_operation_log("audit", "knowledge_create_by_user", document.title, f"用户 {current_user.username} 创建了知识库文档。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document.id})
+    return document
 
 
 @app.get("/knowledge/documents/{document_id}", response_model=KnowledgeDocumentDetail)
-def get_knowledge_base_document(document_id: str) -> KnowledgeDocumentDetail:
+def get_knowledge_base_document(document_id: str, _: UserProfile = Depends(require_roles(["admin", "manager"]))) -> KnowledgeDocumentDetail:
     document = get_knowledge_document(document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Knowledge document not found")
@@ -352,7 +422,7 @@ def get_knowledge_base_document(document_id: str) -> KnowledgeDocumentDetail:
 
 
 @app.get("/knowledge/documents/{document_id}/versions", response_model=list[KnowledgeDocumentVersion])
-def get_knowledge_base_document_versions(document_id: str) -> list[KnowledgeDocumentVersion]:
+def get_knowledge_base_document_versions(document_id: str, _: UserProfile = Depends(require_roles(["admin", "manager"]))) -> list[KnowledgeDocumentVersion]:
     try:
         return list_knowledge_document_versions(document_id)
     except ValueError as exc:
@@ -360,42 +430,50 @@ def get_knowledge_base_document_versions(document_id: str) -> list[KnowledgeDocu
 
 
 @app.post("/knowledge/documents/{document_id}/versions/{version_id}/restore", response_model=KnowledgeDocument)
-def restore_knowledge_base_document_version(document_id: str, version_id: str) -> KnowledgeDocument:
+def restore_knowledge_base_document_version(document_id: str, version_id: str, current_user=Depends(require_roles(["admin", "manager"]))) -> KnowledgeDocument:
     try:
-        return restore_knowledge_document_version(document_id, version_id)
+        document = restore_knowledge_document_version(document_id, version_id)
+        record_operation_log("audit", "knowledge_restore_by_user", document.title, f"用户 {current_user.username} 回退了知识库版本。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document_id, "version_id": version_id})
+        return document
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.delete("/knowledge/documents/{document_id}/versions/{version_id}")
-def delete_knowledge_base_document_version(document_id: str, version_id: str) -> dict[str, str]:
+def delete_knowledge_base_document_version(document_id: str, version_id: str, current_user=Depends(require_roles(["admin", "manager"]))) -> dict[str, str]:
     try:
         delete_knowledge_document_version(document_id, version_id)
+        record_operation_log("audit", "knowledge_version_delete_by_user", document_id, f"用户 {current_user.username} 删除了知识库历史版本。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document_id, "version_id": version_id})
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "deleted"}
 
 
 @app.put("/knowledge/documents/{document_id}", response_model=KnowledgeDocument)
-def update_knowledge_base_document(document_id: str, payload: KnowledgeDocumentUpdate) -> KnowledgeDocument:
+def update_knowledge_base_document(document_id: str, payload: KnowledgeDocumentUpdate, current_user=Depends(require_roles(["admin", "manager"]))) -> KnowledgeDocument:
     try:
-        return update_knowledge_document(document_id, payload)
+        document = update_knowledge_document(document_id, payload)
+        record_operation_log("audit", "knowledge_update_by_user", document.title, f"用户 {current_user.username} 修改了知识库文档。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document_id})
+        return document
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/knowledge/documents/{document_id}/reindex", response_model=KnowledgeDocument)
-def reindex_knowledge_base_document(document_id: str) -> KnowledgeDocument:
+def reindex_knowledge_base_document(document_id: str, current_user=Depends(require_roles(["admin", "manager"]))) -> KnowledgeDocument:
     try:
-        return reindex_knowledge_document(document_id)
+        document = reindex_knowledge_document(document_id)
+        record_operation_log("audit", "knowledge_reindex_by_user", document.title, f"用户 {current_user.username} 重新索引了知识库文档。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document_id})
+        return document
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.delete("/knowledge/documents/{document_id}")
-def delete_knowledge_base_document(document_id: str) -> dict[str, str]:
+def delete_knowledge_base_document(document_id: str, current_user=Depends(require_roles(["admin", "manager"]))) -> dict[str, str]:
     try:
         delete_knowledge_document(document_id)
+        record_operation_log("audit", "knowledge_delete_by_user", document_id, f"用户 {current_user.username} 删除了知识库文档。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document_id})
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"status": "deleted"}
@@ -406,6 +484,7 @@ async def upload_knowledge_base_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     force_weak_duplicate: bool = Query(default=False),
+    current_user=Depends(require_roles(["admin", "manager"])),
 ) -> KnowledgeDocument:
     content = await file.read()
     try:
@@ -415,6 +494,7 @@ async def upload_knowledge_base_document(
             force_weak_duplicate=force_weak_duplicate,
         )
         background_tasks.add_task(index_knowledge_document, document.id)
+        record_operation_log("audit", "knowledge_upload_by_user", document.title, f"用户 {current_user.username} 上传了知识库文件。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document.id, "filename": file.filename})
         return document
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail={"kind": "weak_duplicate", "message": str(exc)}) from exc
@@ -429,15 +509,18 @@ async def upload_knowledge_base_document_revision(
     document_id: str,
     file: UploadFile = File(...),
     force_weak_duplicate: bool = Query(default=False),
+    current_user=Depends(require_roles(["admin", "manager"])),
 ) -> KnowledgeDocument:
     content = await file.read()
     try:
-        return update_knowledge_document_from_upload(
+        document = update_knowledge_document_from_upload(
             document_id,
             file.filename or "knowledge.md",
             content,
             force_weak_duplicate=force_weak_duplicate,
         )
+        record_operation_log("audit", "knowledge_revision_upload_by_user", document.title, f"用户 {current_user.username} 上传了知识库新版本。", {"operator": current_user.username, "operator_role": current_user.role, "document_id": document_id, "filename": file.filename})
+        return document
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail={"kind": "weak_duplicate", "message": str(exc)}) from exc
     except ValueError as exc:
@@ -447,12 +530,13 @@ async def upload_knowledge_base_document_revision(
 
 
 @app.post("/knowledge/ingest", response_model=list[KnowledgeDocument])
-def ingest_knowledge_base() -> list[KnowledgeDocument]:
+def ingest_knowledge_base(current_user=Depends(require_roles(["admin", "manager"]))) -> list[KnowledgeDocument]:
+    record_operation_log("audit", "knowledge_ingest_by_user", "初始化知识库", f"用户 {current_user.username} 触发了内置知识库入库。", {"operator": current_user.username, "operator_role": current_user.role})
     return ingest_knowledge_documents()
 
 
 @app.post("/knowledge/search", response_model=list[KnowledgeHit])
-def search_knowledge_base(payload: KnowledgeSearchRequest) -> list[KnowledgeHit]:
+def search_knowledge_base(payload: KnowledgeSearchRequest, _: UserProfile = Depends(require_roles(["admin", "manager"]))) -> list[KnowledgeHit]:
     return search_knowledge(payload.query, category=payload.category, limit=payload.limit)
 
 

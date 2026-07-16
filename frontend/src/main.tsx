@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 前端单页应用入口。
  *
  * 这个文件负责把后端邮件 Agent 的能力组织成企业后台页面：
@@ -40,6 +40,31 @@ import {
 import "./styles.css";
 
 const API_URL = "/api";
+const AUTH_TOKEN_KEY = "email_agent_access_token";
+
+type UserRole = "admin" | "manager" | "agent";
+
+type UserProfile = {
+  id: string;
+  username: string;
+  display_name: string;
+  role: UserRole;
+};
+
+type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user: UserProfile;
+};
+
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+  const headers = new Headers(init.headers || {});
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return window.fetch(input, { ...init, headers });
+}
 
 // 前后端共享的枚举类型。这里用 TypeScript union 限制状态值，避免 UI 写错状态字符串。
 type Locale = "en" | "zh";
@@ -407,6 +432,11 @@ function normalizeUploadError(detail: unknown) {
 }
 
 function App() {
+  const [authToken, setAuthToken] = useState(() => window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(Boolean(authToken));
+  const [authError, setAuthError] = useState("");
+  const [loginForm, setLoginForm] = useState({ username: "admin", password: "Admin123456" });
   // 邮件、知识库和日志是三个主要业务数据源。为了让页面切换时不反复丢状态，
   // 它们统一放在 App 顶层，然后向不同视图组件传递。
   const [emails, setEmails] = useState<EmailRecord[]>([]);
@@ -467,14 +497,63 @@ function App() {
   const canBulkSendReady = readyToSendEmails.length > 0 && viewedReadyCount === readyToSendEmails.length;
   const processedCount = emails.filter((email) => email.status === "processed" || email.status === "ready_to_send").length;
   const pageMeta = getPageMeta(activeView, t);
+  const visibleViews = getVisibleViews(currentUser?.role);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!authToken) {
+      setAuthLoading(false);
+      return;
+    }
+    apiFetch(`${API_URL}/auth/me`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("登录已过期");
+        setCurrentUser((await response.json()) as UserProfile);
+      })
+      .catch(() => {
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+        setAuthToken("");
+        setCurrentUser(null);
+      })
+      .finally(() => setAuthLoading(false));
+  }, [authToken]);
+
+  async function login(event: React.FormEvent) {
+    event.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const response = await apiFetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginForm),
+      });
+      if (!response.ok) throw new Error("账号或密码错误");
+      const result = (await response.json()) as LoginResponse;
+      window.localStorage.setItem(AUTH_TOKEN_KEY, result.access_token);
+      setAuthToken(result.access_token);
+      setCurrentUser(result.user);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "登录失败");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function logout() {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    setAuthToken("");
+    setCurrentUser(null);
+    setEmails([]);
+    setSelectedId("");
+  }
+
   async function loadEmails(options: { selectFirstIfEmpty?: boolean } = {}) {
     // 保留当前选中邮件，避免后台自动同步刷新后页面突然跳回第一封。
-    const response = await fetch(`${API_URL}/emails`);
+    const response = await apiFetch(`${API_URL}/emails`);
     const data = (await response.json()) as EmailRecord[];
     setEmails(data);
     if (options.selectFirstIfEmpty && !selectedIdRef.current && data.length > 0) {
@@ -484,12 +563,12 @@ function App() {
   }
 
   async function loadKnowledgeDocuments() {
-    const response = await fetch(`${API_URL}/knowledge/documents`);
+    const response = await apiFetch(`${API_URL}/knowledge/documents`);
     setKnowledgeDocs((await response.json()) as KnowledgeDocument[]);
   }
 
   async function loadOperationLogs() {
-    const response = await fetch(`${API_URL}/operation-logs`);
+    const response = await apiFetch(`${API_URL}/operation-logs`);
     setOperationLogs((await response.json()) as OperationLog[]);
   }
 
@@ -500,8 +579,8 @@ function App() {
     setCleaningLogs(true);
     try {
       const [agentResponse, knowledgeResponse] = await Promise.all([
-        fetch(`${API_URL}/emails/workflow-steps/cleanup?retention_days=30`, { method: "DELETE" }),
-        fetch(`${API_URL}/operation-logs/cleanup?retention_days=180&scope=knowledge`, { method: "DELETE" }),
+        apiFetch(`${API_URL}/emails/workflow-steps/cleanup?retention_days=30`, { method: "DELETE" }),
+        apiFetch(`${API_URL}/operation-logs/cleanup?retention_days=180&scope=knowledge`, { method: "DELETE" }),
       ]);
       const agentResult = (await agentResponse.json()) as { deleted: number };
       const knowledgeResult = (await knowledgeResponse.json()) as { deleted: number };
@@ -515,7 +594,7 @@ function App() {
   async function ingestKnowledge() {
     setIngesting(true);
     try {
-      const response = await fetch(`${API_URL}/knowledge/ingest`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/knowledge/ingest`, { method: "POST" });
       setKnowledgeDocs((await response.json()) as KnowledgeDocument[]);
     } finally {
       setIngesting(false);
@@ -525,7 +604,7 @@ function App() {
   async function createKnowledgeDocument() {
     setSavingKnowledge(true);
     try {
-      const response = await fetch(`${API_URL}/knowledge/documents`, {
+      const response = await apiFetch(`${API_URL}/knowledge/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(knowledgeForm),
@@ -552,8 +631,8 @@ function App() {
 
   async function startEditKnowledgeDocument(doc: KnowledgeDocument) {
     const [response, versionsResponse] = await Promise.all([
-      fetch(`${API_URL}/knowledge/documents/${doc.id}`),
-      fetch(`${API_URL}/knowledge/documents/${doc.id}/versions`),
+      apiFetch(`${API_URL}/knowledge/documents/${doc.id}`),
+      apiFetch(`${API_URL}/knowledge/documents/${doc.id}/versions`),
     ]);
     const detail = (await response.json()) as KnowledgeDocument & { content: string };
     const versions = (await versionsResponse.json()) as KnowledgeDocumentVersion[];
@@ -564,7 +643,7 @@ function App() {
   }
 
   async function saveKnowledgeDocument(docId: string) {
-    const response = await fetch(`${API_URL}/knowledge/documents/${docId}`, {
+    const response = await apiFetch(`${API_URL}/knowledge/documents/${docId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(knowledgeEditForm),
@@ -580,7 +659,7 @@ function App() {
     setUploadingKnowledgeRevisionId(doc.id);
     try {
       await uploadKnowledgeFileWithDuplicatePrompt(`${API_URL}/knowledge/documents/${doc.id}/upload`, knowledgeRevisionFile, "PUT");
-      const versionsResponse = await fetch(`${API_URL}/knowledge/documents/${doc.id}/versions`);
+      const versionsResponse = await apiFetch(`${API_URL}/knowledge/documents/${doc.id}/versions`);
       const versions = (await versionsResponse.json()) as KnowledgeDocumentVersion[];
       await loadKnowledgeDocuments();
       await loadOperationLogs();
@@ -598,7 +677,7 @@ function App() {
       const formData = new FormData();
       formData.append("file", file);
       const separator = url.includes("?") ? "&" : "?";
-      return fetch(`${url}${separator}force_weak_duplicate=${forceWeakDuplicate}`, { method, body: formData });
+      return apiFetch(`${url}${separator}force_weak_duplicate=${forceWeakDuplicate}`, { method, body: formData });
     };
 
     let response = await send(false);
@@ -624,7 +703,7 @@ function App() {
   async function reindexKnowledgeDocument(doc: KnowledgeDocument) {
     setReindexingKnowledgeId(doc.id);
     try {
-      const response = await fetch(`${API_URL}/knowledge/documents/${doc.id}/reindex`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/knowledge/documents/${doc.id}/reindex`, { method: "POST" });
       await response.json();
       await loadKnowledgeDocuments();
     } finally {
@@ -639,13 +718,13 @@ function App() {
     if (!confirmed) return;
     setRestoringVersionId(version.id);
     try {
-      const response = await fetch(`${API_URL}/knowledge/documents/${doc.id}/versions/${version.id}/restore`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/knowledge/documents/${doc.id}/versions/${version.id}/restore`, { method: "POST" });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || "版本回退失败");
       }
       await response.json();
-      const versionsResponse = await fetch(`${API_URL}/knowledge/documents/${doc.id}/versions`);
+      const versionsResponse = await apiFetch(`${API_URL}/knowledge/documents/${doc.id}/versions`);
       const versions = (await versionsResponse.json()) as KnowledgeDocumentVersion[];
       await loadKnowledgeDocuments();
       await loadOperationLogs();
@@ -662,12 +741,12 @@ function App() {
     if (!confirmed) return;
     setDeletingVersionId(version.id);
     try {
-      const response = await fetch(`${API_URL}/knowledge/documents/${doc.id}/versions/${version.id}`, { method: "DELETE" });
+      const response = await apiFetch(`${API_URL}/knowledge/documents/${doc.id}/versions/${version.id}`, { method: "DELETE" });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || "删除版本失败");
       }
-      const versionsResponse = await fetch(`${API_URL}/knowledge/documents/${doc.id}/versions`);
+      const versionsResponse = await apiFetch(`${API_URL}/knowledge/documents/${doc.id}/versions`);
       const versions = (await versionsResponse.json()) as KnowledgeDocumentVersion[];
       await loadKnowledgeDocuments();
       await loadOperationLogs();
@@ -684,7 +763,7 @@ function App() {
     if (!confirmed) return;
     setDeletingKnowledgeId(doc.id);
     try {
-      await fetch(`${API_URL}/knowledge/documents/${doc.id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/knowledge/documents/${doc.id}`, { method: "DELETE" });
       await loadKnowledgeDocuments();
       if (editingKnowledgeId === doc.id) setEditingKnowledgeId("");
     } finally {
@@ -695,7 +774,7 @@ function App() {
   async function processEmail() {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/emails/process`, {
+      const response = await apiFetch(`${API_URL}/emails/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -715,7 +794,7 @@ function App() {
     syncingRef.current = true;
     if (!options.silent) setSyncing(true);
     try {
-      const response = await fetch(`${API_URL}/mail/qq/import?limit=5`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/mail/qq/import?limit=5`, { method: "POST" });
       if (!response.ok) return;
       const result = (await response.json()) as { queued_count?: number; skipped_count?: number; emails?: EmailRecord[] };
       const imported = result.emails || [];
@@ -750,7 +829,7 @@ function App() {
     if (!confirmed) return;
     setSendingId(emailId);
     try {
-      const response = await fetch(`${API_URL}/emails/${emailId}/send`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/emails/${emailId}/send`, { method: "POST" });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || "发送失败");
@@ -783,7 +862,7 @@ function App() {
     const failures: string[] = [];
     try {
       for (const email of readyToSendEmails) {
-        const response = await fetch(`${API_URL}/emails/${email.id}/send`, { method: "POST" });
+        const response = await apiFetch(`${API_URL}/emails/${email.id}/send`, { method: "POST" });
         if (!response.ok) {
           const error = await response.json();
           failures.push(`${email.subject}：${error.detail || "发送失败"}`);
@@ -812,7 +891,7 @@ function App() {
       setRegenerateProgress((current) => Math.max(current, estimated));
     }, 350);
     try {
-      const response = await fetch(`${API_URL}/emails/${emailId}/draft/regenerate`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/emails/${emailId}/draft/regenerate`, { method: "POST" });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || "回复草稿生成失败");
@@ -836,7 +915,7 @@ function App() {
   async function review(action: "approve" | "escalate" | "revise" | "undo_escalate", note = "", revisedReply = "") {
     // 所有人工审核动作都走同一个接口，后端负责更新状态和记录审核历史。
     if (!selected) return;
-    const response = await fetch(`${API_URL}/emails/${selected.id}/review`, {
+    const response = await apiFetch(`${API_URL}/emails/${selected.id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -853,13 +932,15 @@ function App() {
 
   useEffect(() => {
     // 页面初始化时一次性加载所有基础数据。
+    if (!currentUser) return;
     loadEmails({ selectFirstIfEmpty: true });
-    loadKnowledgeDocuments();
-    loadOperationLogs();
-  }, []);
+    if (canAccessView(currentUser.role, "knowledge")) loadKnowledgeDocuments();
+    if (canAccessView(currentUser.role, "runs")) loadOperationLogs();
+  }, [currentUser?.id]);
 
   useEffect(() => {
     // 自动同步 QQ 邮箱只在浏览器标签可见时运行，减少后台空转请求。
+    if (!currentUser) return;
     const syncWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
       syncQQMail({ silent: true });
@@ -870,7 +951,7 @@ function App() {
       window.clearInterval(timer);
       window.clearTimeout(initialTimer);
     };
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     // 用户看过所有 ready_to_send 邮件后，才允许批量确认发送。
@@ -890,6 +971,41 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [knowledgeDocs]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!visibleViews.includes(activeView)) {
+      setActiveView(visibleViews[0] ?? "inbox");
+    }
+  }, [activeView, currentUser?.role, visibleViews]);
+
+  if (authLoading && !currentUser) {
+    return <div className="authShell"><div className="authCard"><strong>正在检查登录状态...</strong></div></div>;
+  }
+
+  if (!currentUser) {
+    return (
+      <main className="authShell">
+        <form className="authCard" onSubmit={login}>
+          <div className="brand authBrand">
+            <div className="brandMark"><Mail size={20} /></div>
+            <div><strong>邮件 Agent</strong><span>企业后台登录</span></div>
+          </div>
+          <label>
+            <span>账号</span>
+            <input value={loginForm.username} onChange={(event) => setLoginForm((value) => ({ ...value, username: event.target.value }))} />
+          </label>
+          <label>
+            <span>密码</span>
+            <input type="password" value={loginForm.password} onChange={(event) => setLoginForm((value) => ({ ...value, password: event.target.value }))} />
+          </label>
+          {authError && <p className="authError">{authError}</p>}
+          <button className="primaryButton" type="submit" disabled={authLoading}>{authLoading ? "登录中" : "登录"}</button>
+          <p className="authHint">演示账号：admin / manager / agent，默认密码 Admin123456。</p>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar">
@@ -897,12 +1013,17 @@ function App() {
           <div className="brandMark"><Mail size={20} /></div>
           <div><strong>{t.appName}</strong><span>{t.appScope}</span></div>
         </div>
+        <div className="userPanel">
+          <strong>{currentUser.display_name}</strong>
+          <span>{roleLabels[currentUser.role]}</span>
+          <button type="button" onClick={logout}>退出登录</button>
+        </div>
         <nav className="sideNav">
-          <NavButton active={activeView === "inbox"} icon={<Inbox size={16} />} label={t.navInbox} onClick={() => setActiveView("inbox")} />
-          <NavButton active={activeView === "review"} icon={<ListChecks size={16} />} label={t.navReview} onClick={() => setActiveView("review")} />
-          <NavButton active={activeView === "knowledge"} icon={<Database size={16} />} label={t.navKnowledge} onClick={() => setActiveView("knowledge")} />
-          <NavButton active={activeView === "runs"} icon={<Activity size={16} />} label={t.navRuns} onClick={() => setActiveView("runs")} />
-          <NavButton active={activeView === "settings"} icon={<Settings size={16} />} label={t.navSettings} onClick={() => setActiveView("settings")} />
+          {visibleViews.includes("inbox") && <NavButton active={activeView === "inbox"} icon={<Inbox size={16} />} label={t.navInbox} onClick={() => setActiveView("inbox")} />}
+          {visibleViews.includes("review") && <NavButton active={activeView === "review"} icon={<ListChecks size={16} />} label={t.navReview} onClick={() => setActiveView("review")} />}
+          {visibleViews.includes("knowledge") && <NavButton active={activeView === "knowledge"} icon={<Database size={16} />} label={t.navKnowledge} onClick={() => setActiveView("knowledge")} />}
+          {visibleViews.includes("runs") && <NavButton active={activeView === "runs"} icon={<Activity size={16} />} label={t.navRuns} onClick={() => setActiveView("runs")} />}
+          {visibleViews.includes("settings") && <NavButton active={activeView === "settings"} icon={<Settings size={16} />} label={t.navSettings} onClick={() => setActiveView("settings")} />}
         </nav>
       </aside>
 
@@ -1914,8 +2035,26 @@ function getPageMeta(activeView: ActiveView, t: Record<string, string>) {
   return meta[activeView];
 }
 
+const roleLabels: Record<UserRole, string> = {
+  admin: "系统管理员",
+  manager: "客服主管",
+  agent: "客服人员",
+};
+
+function getVisibleViews(role?: UserRole): ActiveView[] {
+  if (role === "admin") return ["inbox", "review", "knowledge", "runs", "settings"];
+  if (role === "manager") return ["inbox", "review", "knowledge", "runs"];
+  if (role === "agent") return ["inbox", "review"];
+  return ["inbox"];
+}
+
+function canAccessView(role: UserRole, view: ActiveView) {
+  return getVisibleViews(role).includes(view);
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+

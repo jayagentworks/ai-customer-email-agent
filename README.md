@@ -99,6 +99,16 @@ $env:NGINX_IMAGE="docker.m.daocloud.io/library/nginx:1.27-alpine"
 docker compose up -d --build
 ```
 
+Default local login accounts are created automatically when the user table is
+empty:
+
+- `admin / Admin123456`: full system administration.
+- `manager / Admin123456`: review queue, knowledge base, and run logs.
+- `agent / Admin123456`: inbox and review workflow only.
+
+For production-like deployment, override `JWT_SECRET` and
+`DEFAULT_ADMIN_PASSWORD` in `.env`.
+
 The backend image also installs local OCR/runtime dependencies:
 
 - `tesseract-ocr`
