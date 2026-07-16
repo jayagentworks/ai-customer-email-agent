@@ -497,9 +497,14 @@ function App() {
   const t = copy[locale];
   // 收件箱中把客服邮件和非客服邮件拆成两个可折叠列表：
   // 客服邮件用于处理和发送；非客服邮件只用于快速复核，避免通知类邮件干扰主流程。
-  const inboxEmails = emails.filter((email) => email.status !== "irrelevant");
-  const irrelevantEmails = emails.filter((email) => email.status === "irrelevant");
-  const selected = useMemo(() => emails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? emails[0], [emails, inboxEmails, selectedId]);
+  const inboxEmails = emails.filter((email) => {
+    if (email.status === "irrelevant") return false;
+    if (currentUser?.role === "manager") return isEscalationInboxEmail(email);
+    return true;
+  });
+  const irrelevantEmails = currentUser?.role === "manager" ? [] : emails.filter((email) => email.status === "irrelevant");
+  const visibleInboxEmails = useMemo(() => [...inboxEmails, ...irrelevantEmails], [inboxEmails, irrelevantEmails]);
+  const selected = useMemo(() => visibleInboxEmails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? irrelevantEmails[0] ?? emails[0], [emails, inboxEmails, irrelevantEmails, visibleInboxEmails, selectedId]);
   const reviewEmails = emails.filter((email) => {
     if (["irrelevant", "sent", "processed"].includes(email.status)) return false;
     return ["human_review", "needs_revision", "escalated", "ready_to_send"].includes(email.status) || email.priority === "high";
@@ -1264,6 +1269,10 @@ function hasActiveEscalation(email: EmailRecord) {
   return email.status === "escalated" || Boolean(email.escalation_ticket && ["open", "assigned"].includes(email.escalation_ticket.status));
 }
 
+function isEscalationInboxEmail(email: EmailRecord) {
+  return hasActiveEscalation(email) || hasEscalationHistory(email);
+}
+
 function canUserSendReply(user: UserProfile | null, email: EmailRecord) {
   if (email.status !== "ready_to_send") return false;
   if (user?.role === "agent" && hasEscalationHistory(email)) return false;
@@ -1865,27 +1874,6 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
           </label>
         </div>}
         {!isIrrelevant && selected.risk_flags.length > 0 && <div className="riskBox"><strong>{t.riskFlags}</strong>{selected.risk_flags.map((flag) => <span key={flag}>{formatRiskFlag(flag, locale)}</span>)}</div>}
-        {!isIrrelevant && ticket && (
-          <div className="escalationBox">
-            <div>
-              <strong>{locale === "zh" ? "升级工单" : "Escalation ticket"}</strong>
-              <span>{formatEscalationStatus(ticket.status, locale)}</span>
-            </div>
-            <p>{safeDisplayText(ticket.reason || selected.review_note, locale === "zh" ? "暂无升级原因。" : "No escalation reason.")}</p>
-            <small>
-              {locale === "zh" ? "发起人" : "Created by"}：{ticket.created_by || "-"}
-              {ticket.assigned_to ? ` · ${locale === "zh" ? "处理人" : "Assignee"}：${ticket.assigned_to}` : ""}
-            </small>
-            {ticket.resolution_note && <p>{safeDisplayText(ticket.resolution_note)}</p>}
-            {canHandleEscalation && ticket.status !== "resolved" && ticket.status !== "returned" && (
-              <div className="escalationActions">
-                <button type="button" onClick={() => updateEscalation(selected.id, "assign", reviewNote || "升级工单已接单。")}>{locale === "zh" ? "接单" : "Assign to me"}</button>
-                <button type="button" onClick={() => updateEscalation(selected.id, "resolve", reviewNote || "升级问题已处理完成，退回审核确认。")}>{locale === "zh" ? "处理完成" : "Resolve"}</button>
-                <button type="button" onClick={() => updateEscalation(selected.id, "return_to_review", reviewNote || "升级工单退回审核队列。")}>{locale === "zh" ? "退回审核" : "Return"}</button>
-              </div>
-            )}
-          </div>
-        )}
         {!isIrrelevant && safeDisplayText(selected.review_note) && <p className="reviewNote">{safeDisplayText(selected.review_note)}</p>}
         {reviewActions.length > 0 && (
           <div className="reviewHistory">
