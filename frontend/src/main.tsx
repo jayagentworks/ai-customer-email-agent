@@ -92,6 +92,7 @@ type KnowledgeHit = {
   category_score?: number;
   category?: string;
   match_reason?: string;
+  reliability?: "strong" | "medium" | "weak";
   page_number?: number | null;
   section_title?: string;
 };
@@ -1280,10 +1281,14 @@ function isLowRiskReadyToSend(email: EmailRecord) {
     email.status === "ready_to_send" &&
     email.priority === "low" &&
     email.confidence >= 0.78 &&
-    email.knowledge_hits.length > 0 &&
+    hasStrongKnowledgeGrounding(email) &&
     !hasManualApproval(email) &&
     !hasEscalationHistory(email)
   );
+}
+
+function hasStrongKnowledgeGrounding(email: EmailRecord) {
+  return email.knowledge_hits.some((hit) => (hit.reliability ?? "weak") === "strong");
 }
 
 function canUserSendReply(user: UserProfile | null, email: EmailRecord) {
@@ -1651,10 +1656,15 @@ function normalizedHitScores(hit: KnowledgeHit) {
 function KnowledgeHitCard({ hit, locale }: { hit: KnowledgeHit; locale: Locale }) {
   const categoryLabel = hit.category ? categoryLabels[locale][hit.category] || hit.category : categoryLabels[locale].other;
   const scores = normalizedHitScores(hit);
+  const reliability = hit.reliability ?? "weak";
+  const reliabilityLabels = {
+    zh: { strong: "强依据", medium: "参考依据", weak: "弱相关" },
+    en: { strong: "Strong", medium: "Reference", weak: "Weak" },
+  } as const;
   return (
-    <div className="source">
+    <div className={`source ${reliability}`}>
       <div><strong>{hit.title}</strong><span>{hit.source}</span></div>
-      <small>{Math.round(hit.score * 100)}%</small>
+      <small className={`reliabilityBadge ${reliability}`}>{reliabilityLabels[locale][reliability]} · {Math.round(hit.score * 100)}%</small>
       <p>{hit.snippet}</p>
       <div className="hitReason">{hit.match_reason || "综合语义、关键词和分类信号命中"}</div>
       <div className="hitMetrics">

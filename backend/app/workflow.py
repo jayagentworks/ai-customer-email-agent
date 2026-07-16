@@ -482,6 +482,12 @@ def retrieve_node(state: EmailWorkflowState) -> EmailWorkflowState:
     return {"email": email}
 
 
+def reliable_knowledge_hits(email: EmailRecord, *, minimum: str = "medium") -> list:
+    levels = {"weak": 0, "medium": 1, "strong": 2}
+    threshold = levels[minimum]
+    return [hit for hit in email.knowledge_hits if levels.get(getattr(hit, "reliability", "weak"), 0) >= threshold]
+
+
 def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
     """回复草稿生成节点。
 
@@ -490,6 +496,7 @@ def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
     """
     email = state["email"]
     email.draft_reply, used_llm, draft_error = generate_draft_reply(email)
+    grounded_hits = reliable_knowledge_hits(email, minimum="medium")
     if used_llm:
         email.agent_metrics.llm_calls += 1
         email.agent_metrics.draft_llm_calls += 1
@@ -498,13 +505,13 @@ def draft_node(state: EmailWorkflowState) -> EmailWorkflowState:
     update_estimated_cost(email)
     detail = "Draft generation used the customer email, classification result, and retrieved knowledge snippets as LLM context."
     status = "complete"
-    confidence = 0.86 if email.knowledge_hits else 0.68
+    confidence = 0.86 if grounded_hits else 0.68
     if not used_llm:
         detail = "LLM draft generation was unavailable, so the system used the structured fallback template."
         if draft_error:
             detail = f"{detail} Fallback reason: {draft_error}"
         status = "warning"
-        confidence = 0.72 if email.knowledge_hits else 0.52
+        confidence = 0.72 if grounded_hits else 0.52
     email.steps.append(
         WorkflowStep(
             name="Draft reply",
@@ -525,6 +532,7 @@ def regenerate_draft_reply(email: EmailRecord) -> EmailRecord:
     """
     variant = next_reply_variant(email)
     email.draft_reply, used_llm, draft_error = generate_draft_reply(email, variant=variant)
+    grounded_hits = reliable_knowledge_hits(email, minimum="medium")
     if used_llm:
         email.agent_metrics.llm_calls += 1
         email.agent_metrics.draft_llm_calls += 1
@@ -533,13 +541,13 @@ def regenerate_draft_reply(email: EmailRecord) -> EmailRecord:
     update_estimated_cost(email)
     detail = "The operator requested another LLM-generated draft while keeping the same category, risk level, and knowledge grounding."
     status = "complete"
-    confidence = 0.84 if email.knowledge_hits else 0.64
+    confidence = 0.84 if grounded_hits else 0.64
     if not used_llm:
         detail = "The operator requested another draft, but LLM generation was unavailable, so the fallback template was used."
         if draft_error:
             detail = f"{detail} Fallback reason: {draft_error}"
         status = "warning"
-        confidence = 0.7 if email.knowledge_hits else 0.5
+        confidence = 0.7 if grounded_hits else 0.5
     email.steps.append(
         WorkflowStep(
             name="Regenerate draft reply",
@@ -573,14 +581,14 @@ def build_llm_knowledge_hits(email: EmailRecord) -> list[dict]:
             "category_score": hit.category_score,
             "category": hit.category,
         }
-        for hit in email.knowledge_hits[:3]
+        for hit in reliable_knowledge_hits(email, minimum="medium")[:3]
     ]
 
 
 def estimate_draft_input_tokens(email: EmailRecord) -> int:
     """估算草稿生成 prompt 的输入 token。"""
     knowledge_context = "\n\n".join(
-        f"{hit.title} ({hit.source})\n{hit.snippet}" for hit in email.knowledge_hits[:3]
+        f"{hit.title} ({hit.source})\n{hit.snippet}" for hit in reliable_knowledge_hits(email, minimum="medium")[:3]
     )
     prompt_overhead = 520
     return estimate_tokens(build_email_context(email)) + estimate_tokens(knowledge_context) + prompt_overhead
@@ -893,12 +901,13 @@ def review_node(state: EmailWorkflowState) -> EmailWorkflowState:
     仍然需要用户一键确认后才真实发送；其他情况进入人工审核队列。
     """
     email = state["email"]
+    strong_grounding = bool(reliable_knowledge_hits(email, minimum="strong"))
     can_prepare_to_send = (
         email.risk_level == "low"
         and not email.should_escalate
         and email.category not in {None, "other"}
         and email.confidence >= 0.7
-        and bool(email.knowledge_hits)
+        and strong_grounding
     )
     email.status = "ready_to_send" if can_prepare_to_send else "human_review"
     email.steps.append(

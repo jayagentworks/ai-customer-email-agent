@@ -560,10 +560,9 @@ def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -
 
     scored: list[tuple[float, KnowledgeChunkORM, float, float, float, str]] = []
     query_terms = extract_terms(text)
-    category_terms = category_keyword_terms(category)
     for row in rows:
         vector_score = cosine_similarity(query_embedding, row.embedding or [])
-        keyword_score = keyword_overlap(query_terms | category_terms, row.content)
+        keyword_score = keyword_overlap(query_terms, row.content)
         category_score = 1.0 if category and row.category == category else 0.0
         score = max(0.0, min(0.99, vector_score * 0.55 + keyword_score * 0.30 + category_score * 0.15))
         if category_score > 0 and (keyword_score > 0 or vector_score > 0):
@@ -583,6 +582,7 @@ def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -
             category_score=round(category_score, 2),
             category=row.category,
             match_reason=match_reason,
+            reliability=knowledge_reliability(score),
             page_number=row.page_number,
             section_title=row.section_title,
         )
@@ -1198,6 +1198,15 @@ def build_match_reason(vector_score: float, keyword_score: float, category_score
     if category_score > 0:
         reasons.append("邮件分类与知识分类一致")
     return "；".join(reasons) or "综合语义、关键词和分类信号命中"
+
+
+def knowledge_reliability(score: float) -> str:
+    """把 RAG 综合分映射为知识依据可信度层级。"""
+    if score >= 0.6:
+        return "strong"
+    if score >= 0.35:
+        return "medium"
+    return "weak"
 
 
 def estimate_tokens(text: str) -> int:

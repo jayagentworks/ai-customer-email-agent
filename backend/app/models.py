@@ -18,6 +18,7 @@ RiskLevel = Literal["low", "medium", "high"]
 ReviewActionType = Literal["approve", "revise", "escalate", "undo_escalate"]
 KnowledgeDocumentStatus = Literal["processing", "indexed", "failed", "needs_reindex"]
 EscalationStatus = Literal["open", "assigned", "resolved", "returned"]
+KnowledgeReliability = Literal["strong", "medium", "weak"]
 
 
 class EmailCreate(BaseModel):
@@ -52,6 +53,7 @@ class KnowledgeHit(BaseModel):
     category_score: float = 0.0
     category: str = "other"
     match_reason: str = ""
+    reliability: KnowledgeReliability = "weak"
     page_number: int | None = None
     section_title: str = ""
 

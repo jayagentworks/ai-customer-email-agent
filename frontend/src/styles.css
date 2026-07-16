@@ -1632,6 +1632,21 @@ h3 {
   min-width: 0;
 }
 
+.source.strong {
+  border-color: #b8d8c5;
+  background: #fbfffc;
+}
+
+.source.medium {
+  border-color: #c8dced;
+  background: #fbfdff;
+}
+
+.source.weak {
+  border-color: #e1e6eb;
+  background: #fbfbfc;
+}
+
 .source strong,
 .source span {
   min-width: 0;
@@ -1640,6 +1655,29 @@ h3 {
 
 .source p {
   grid-column: 1 / -1;
+}
+
+.reliabilityBadge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.reliabilityBadge.strong {
+  background: #e8f5ee;
+  color: #216142;
+}
+
+.reliabilityBadge.medium {
+  background: #edf5fb;
+  color: #285982;
+}
+
+.reliabilityBadge.weak {
+  background: #eef1f4;
+  color: #60717f;
 }
 
 .hitReason {
