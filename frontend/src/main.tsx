@@ -1951,6 +1951,41 @@ function formatEmailBody(body: string, locale: Locale) {
   if (isCorruptedText(body)) {
     return locale === "zh" ? "邮件正文编码异常，已隐藏损坏内容。" : "Email body encoding is invalid, so the corrupted content is hidden.";
   }
+  return stripCssPreamble(body);
+}
+
+function stripCssPreamble(body: string) {
+  const text = body.trim();
+  const head = text.slice(0, 3000);
+  const cssSignals = [
+    /\{[^}]{0,120}box-sizing\s*:/i,
+    /@media\s*\(/i,
+    /!important/i,
+    /\bmso-/i,
+    /font-size\s*:/i,
+    /line-height\s*:/i,
+    /#MessageViewBody/i,
+    /\.desktop_hide/i,
+  ].filter((pattern) => pattern.test(head)).length;
+  if (cssSignals < 3) return body;
+
+  const primaryAnchors = [
+    /\bHi\s+[^,\n]{0,40},/i,
+    /\bHello\s+[^,\n]{0,40},/i,
+    /\bDear\s+[^,\n]{0,40},/i,
+    /你好[，,]/,
+  ];
+  const secondaryAnchors = [
+    /\bSign In\b/i,
+    /\bView in browser\b/i,
+  ];
+  for (const anchors of [primaryAnchors, secondaryAnchors]) {
+    const indexes = anchors.map((pattern) => {
+      const match = text.match(pattern);
+      return match?.index ?? -1;
+    }).filter((index) => index > 40);
+    if (indexes.length > 0) return text.slice(Math.min(...indexes)).trim();
+  }
   return body;
 }
 

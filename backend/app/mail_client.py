@@ -14,6 +14,7 @@ import os
 import re
 import smtplib
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from tempfile import TemporaryDirectory
 from pathlib import Path
 from email import message_from_bytes
@@ -193,14 +194,99 @@ def clean_email_text(text: str) -> str:
     if not text:
         return text
     cleaned = html.unescape(text)
+    if looks_like_html(cleaned):
+        cleaned = extract_visible_html_text(cleaned)
     cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
     cleaned = re.sub(r"(?i)<br\s*/?>", "\n", cleaned)
     cleaned = re.sub(r"(?i)</p\s*>", "\n", cleaned)
     cleaned = re.sub(r"(?i)<li\s*>", "\n- ", cleaned)
+    cleaned = re.sub(r"(?is)<(style|script|head|noscript|template)[^>]*>.*?</\1>", "\n", cleaned)
     cleaned = re.sub(r"<[^>]+>", "", cleaned)
+    cleaned = strip_css_preamble(cleaned)
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def looks_like_html(text: str) -> bool:
+    return bool(re.search(r"(?is)</?(html|body|div|table|style|p|br|span|a|meta|head)\b", text))
+
+
+class VisibleTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"style", "script", "head", "noscript", "template"}:
+            self.skip_depth += 1
+            return
+        if self.skip_depth:
+            return
+        if tag.lower() in {"br", "p", "div", "tr", "li", "table", "section", "article", "h1", "h2", "h3"}:
+            self.parts.append("\n")
+        if tag.lower() == "li":
+            self.parts.append("- ")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"style", "script", "head", "noscript", "template"} and self.skip_depth:
+            self.skip_depth -= 1
+            return
+        if self.skip_depth:
+            return
+        if tag.lower() in {"p", "div", "tr", "li", "table", "section", "article", "h1", "h2", "h3"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self.skip_depth and data.strip():
+            self.parts.append(data)
+
+    def text(self) -> str:
+        return "".join(self.parts)
+
+
+def extract_visible_html_text(text: str) -> str:
+    parser = VisibleTextExtractor()
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:
+        return text
+    visible = parser.text().strip()
+    return visible or text
+
+
+def strip_css_preamble(text: str) -> str:
+    """清理被邮件客户端当作正文吐出来的 CSS 片段。
+
+    有些营销邮件的 text/plain 部分会把 CSS reset、媒体查询或隐藏块拼到正文
+    最前面，形如 ``*{box-sizing...}@media... Sign In Hi ...``。这些内容不
+    属于客户可读正文，会干扰非客服复核和后续分类，因此在展示/分析前切掉。
+    """
+    cleaned = text.strip()
+    css_signal = len(re.findall(r"[#.]?[A-Za-z0-9_-]+\s*\{|@\s*media|!important|mso-|box-sizing|font-size|line-height", cleaned[:3000], re.I))
+    if css_signal < 4:
+        return cleaned
+    primary_anchors = [
+        r"\bHi\s+[^,\n]{0,40},",
+        r"\bHello\s+[^,\n]{0,40},",
+        r"\bDear\s+[^,\n]{0,40},",
+        r"你好[，,]",
+    ]
+    secondary_anchors = [
+        r"\bSign In\b",
+        r"\bView in browser\b",
+    ]
+    for anchors in (primary_anchors, secondary_anchors):
+        indexes = []
+        for pattern in anchors:
+            match = re.search(pattern, cleaned, re.I)
+            if match and match.start() > 40:
+                indexes.append(match.start())
+        if indexes:
+            return cleaned[min(indexes):].strip()
+    return cleaned
 
 
 def detect_inline_charset(payload: bytes) -> str | None:
