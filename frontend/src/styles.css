@@ -72,10 +72,14 @@ button {
   /* 侧边栏承载模块导航，样式保持轻量，避免抢占主工作区注意力。 */
   background: #fbfcfd;
   border-right: 1px solid #dfe5ea;
+  height: 100vh;
   padding: 20px 18px;
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  overflow: hidden;
 }
 
 .brand {
@@ -136,6 +140,8 @@ button {
   /* 模块入口采用纵向列表，当前模块用浅蓝背景提示。 */
   display: grid;
   gap: 6px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .userPanel {
@@ -1941,6 +1947,14 @@ pre {
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid #dfe5ea;
+    height: auto;
+    position: static;
+    overflow: visible;
+  }
+
+  .sideNav {
+    overflow: visible;
+    padding-right: 0;
   }
 
   .userPanel {
