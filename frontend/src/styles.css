@@ -142,6 +142,7 @@ button {
   border: 1px solid #dfe5ea;
   border-radius: 8px;
   background: #ffffff;
+  margin-top: auto;
   padding: 12px;
   display: grid;
   gap: 6px;
@@ -1940,6 +1941,10 @@ pre {
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid #dfe5ea;
+  }
+
+  .userPanel {
+    margin-top: 0;
   }
 
   .reviewLayout {

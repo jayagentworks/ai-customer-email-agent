@@ -1073,11 +1073,6 @@ function App() {
           <div className="brandMark"><Mail size={20} /></div>
           <div><strong>{t.appName}</strong><span>{t.appScope}</span></div>
         </div>
-        <div className="userPanel">
-          <strong>{currentUser.display_name}</strong>
-          <span>{roleLabels[currentUser.role]}</span>
-          <button type="button" onClick={logout}>退出登录</button>
-        </div>
         <nav className="sideNav">
           {visibleViews.includes("inbox") && <NavButton active={activeView === "inbox"} icon={<Inbox size={16} />} label={t.navInbox} onClick={() => setActiveView("inbox")} />}
           {visibleViews.includes("review") && <NavButton active={activeView === "review"} icon={<ListChecks size={16} />} label={t.navReview} onClick={() => setActiveView("review")} />}
@@ -1085,6 +1080,11 @@ function App() {
           {visibleViews.includes("runs") && <NavButton active={activeView === "runs"} icon={<Activity size={16} />} label={t.navRuns} onClick={() => setActiveView("runs")} />}
           {visibleViews.includes("settings") && <NavButton active={activeView === "settings"} icon={<Settings size={16} />} label={t.navSettings} onClick={() => setActiveView("settings")} />}
         </nav>
+        <div className="userPanel">
+          <strong>{currentUser.display_name}</strong>
+          <span>{roleLabels[currentUser.role]}</span>
+          <button type="button" onClick={logout}>退出登录</button>
+        </div>
       </aside>
 
       <section className="content">
