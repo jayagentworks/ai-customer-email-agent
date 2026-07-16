@@ -504,10 +504,11 @@ function App() {
   const reviewEmails = emails.filter((email) => {
     if (["irrelevant", "sent", "processed"].includes(email.status)) return false;
     if (currentUser?.role === "manager") return isEscalationEmail(email);
+    if (email.status === "ready_to_send") return hasManualApproval(email) || hasEscalationHistory(email);
     return ["human_review", "needs_revision", "escalated", "ready_to_send"].includes(email.status) || email.priority === "high";
   });
   const selectedReview = reviewEmails.find((email) => email.id === selectedId) ?? reviewEmails[0];
-  const readyToSendEmails = emails.filter((email) => email.status === "ready_to_send");
+  const readyToSendEmails = emails.filter(isLowRiskReadyToSend);
   const viewedReadyCount = readyToSendEmails.filter((email) => viewedReadyIds.includes(email.id)).length;
   const canBulkSendReady = readyToSendEmails.length > 0 && viewedReadyCount === readyToSendEmails.length;
   const processedCount = emails.filter((email) => email.status === "processed" || email.status === "ready_to_send").length;
@@ -1262,12 +1263,27 @@ function hasEscalationHistory(email: EmailRecord) {
   return Boolean(email.escalation_ticket && ["open", "assigned", "resolved"].includes(email.escalation_ticket.status));
 }
 
+function hasManualApproval(email: EmailRecord) {
+  return (email.review_actions || []).some((action) => action.action === "approve");
+}
+
 function hasActiveEscalation(email: EmailRecord) {
   return email.status === "escalated" || Boolean(email.escalation_ticket && ["open", "assigned"].includes(email.escalation_ticket.status));
 }
 
 function isEscalationEmail(email: EmailRecord) {
   return hasActiveEscalation(email) || hasEscalationHistory(email);
+}
+
+function isLowRiskReadyToSend(email: EmailRecord) {
+  return (
+    email.status === "ready_to_send" &&
+    email.priority === "low" &&
+    email.confidence >= 0.78 &&
+    email.knowledge_hits.length > 0 &&
+    !hasManualApproval(email) &&
+    !hasEscalationHistory(email)
+  );
 }
 
 function canUserSendReply(user: UserProfile | null, email: EmailRecord) {
