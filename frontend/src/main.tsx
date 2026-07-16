@@ -25,7 +25,6 @@ import {
   ListChecks,
   Mail,
   Pencil,
-  Play,
   PlusCircle,
   RefreshCcw,
   Search,
@@ -210,25 +209,6 @@ type EmailRecord = {
   created_at: string;
   updated_at: string;
 };
-
-const sampleBodies = [
-  {
-    subject: "Refund request for duplicate subscription charge",
-    body: "Hi team, I was charged twice for my Pro subscription this month. Please refund the duplicate payment and confirm when this is resolved.",
-  },
-  {
-    subject: "Cannot log in after password reset",
-    body: "I reset my password three times but the app still says the token is invalid. I need access before my client meeting today.",
-  },
-  {
-    subject: "Very unhappy with support response time",
-    body: "This is my third email. Nobody has helped us and our team is blocked. If this continues we will cancel the annual contract.",
-  },
-  {
-    subject: "重复扣费需要退款",
-    body: "你好，我这个月订阅被重复扣费了两次，请帮我退款。如果没有人处理，我会考虑取消合同。",
-  },
-];
 
 const copy = {
   // 页面文案集中管理，语言切换时只需要根据 locale 取对应文案。
@@ -472,7 +452,6 @@ function App() {
     content:
       "适用场景：客户反馈订单物流延迟、包裹长时间未更新或要求补偿。\n\n处理原则：先确认订单号、物流单号和承运商状态；如果超过承诺送达时间，应安抚客户并创建跟进工单；涉及退款或赔付时进入人工审核。",
   });
-  const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [sendingId, setSendingId] = useState("");
   const [regeneratingId, setRegeneratingId] = useState("");
@@ -485,12 +464,6 @@ function App() {
   const [cleaningLogs, setCleaningLogs] = useState(false);
   const [locale, setLocale] = useState<Locale>("zh");
   const [activeView, setActiveView] = useState<ActiveView>("inbox");
-  const [form, setForm] = useState({
-    customer_name: "Alex Morgan",
-    customer_email: "alex@example.com",
-    subject: sampleBodies[0].subject,
-    body: sampleBodies[0].body,
-  });
   const syncingRef = useRef(false);
   const selectedIdRef = useRef("");
 
@@ -784,23 +757,6 @@ function App() {
       if (editingKnowledgeId === doc.id) setEditingKnowledgeId("");
     } finally {
       setDeletingKnowledgeId("");
-    }
-  }
-
-  async function processEmail() {
-    setLoading(true);
-    try {
-      const response = await apiFetch(`${API_URL}/emails/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const created = (await response.json()) as EmailRecord;
-      await loadEmails();
-      await loadOperationLogs();
-      setSelectedId(created.id);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -1105,7 +1061,6 @@ function App() {
             />
             <div className="layout inboxLayout">
               <div className="moduleStack inboxStack">
-                <Composer t={t} form={form} setForm={setForm} loading={loading} processEmail={processEmail} />
                 <EmailQueue
                   title={t.inboxQueue}
                   hint={t.inboxQueueHint}
@@ -1681,26 +1636,6 @@ function KnowledgeHitCard({ hit, locale }: { hit: KnowledgeHit; locale: Locale }
   );
 }
 
-function Composer({ t, form, setForm, loading, processEmail }: {
-  t: Record<string, string>;
-  form: { customer_name: string; customer_email: string; subject: string; body: string };
-  setForm: React.Dispatch<React.SetStateAction<{ customer_name: string; customer_email: string; subject: string; body: string }>>;
-  loading: boolean;
-  processEmail: () => void;
-}) {
-  return (
-    <section className="composer">
-      <div className="sectionTitle"><span>{t.newEmail}</span></div>
-      <label>{t.customer}<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} /></label>
-      <label>{t.email}<input value={form.customer_email} onChange={(event) => setForm({ ...form, customer_email: event.target.value })} /></label>
-      <label>{t.subject}<input value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} /></label>
-      <label>{t.body}<textarea rows={7} value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} /></label>
-      <div className="sampleButtons">{sampleBodies.map((sample, index) => <button key={sample.subject} className="ghostButton" onClick={() => setForm({ ...form, ...sample })}>{t.sample} {index + 1}</button>)}</div>
-      <button className="primaryButton" onClick={processEmail} disabled={loading}><Play size={16} />{loading ? t.processing : t.processEmail}</button>
-    </section>
-  );
-}
-
 function EmailQueue({
   // 收件箱队列支持两个折叠列表：客服邮件和非客服邮件复核。
   // 每个列表内部独立滚动，避免两个列表同时展开时互相遮挡。
@@ -1749,7 +1684,13 @@ function EmailQueue({
       <div className="queueHeader">
         <div><h3>{title}</h3><span>{hint}</span></div>
         {onRefresh && (
-          <button className="iconButton" onClick={onRefresh} disabled={refreshing} title={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}>
+          <button
+            className="iconButton tooltipButton"
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-label={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}
+            data-tooltip={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}
+          >
             <RefreshCcw size={16} />
           </button>
         )}

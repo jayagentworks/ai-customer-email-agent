@@ -337,8 +337,34 @@ textarea:focus {
 }
 
 .iconButton {
+  position: relative;
   width: 34px;
   height: 34px;
+}
+
+.tooltipButton::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: max-content;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #172026;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 80ms ease, transform 80ms ease;
+}
+
+.tooltipButton:hover::after,
+.tooltipButton:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .content {
