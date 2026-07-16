@@ -937,6 +937,18 @@ function App() {
     // 所有人工审核动作都走同一个接口，后端负责更新状态和记录审核历史。
     const target = activeView === "review" ? selectedReview : selected;
     if (!target) return;
+    if (action === "approve" && hasActiveEscalation(target)) {
+      window.alert("该邮件正在升级处理中，请先撤销升级，或由客服主管处理升级工单后再通过。");
+      return;
+    }
+    if (action === "approve" && currentUser?.role === "agent" && hasEscalationHistory(target)) {
+      window.alert("该邮件已经被升级处理，客服人员不能发送回复，请由客服主管或管理员处理。");
+      return;
+    }
+    if (action === "revise" && hasActiveEscalation(target)) {
+      window.alert("该邮件正在升级处理中，请先撤销升级，或由客服主管处理升级工单后再修改。");
+      return;
+    }
     const response = await apiFetch(`${API_URL}/emails/${target.id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1811,7 +1823,7 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
         <div className="replyHeader">
           <h3>{t.draftReply}</h3>
           {!isIrrelevant && <div className="reviewActions">
-            <button onClick={() => review("approve", reviewNote, revisedReply)} disabled={activeEscalation} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再通过" : ""}><ShieldCheck size={16} />{t.approve}</button>
+            <button onClick={() => review("approve", reviewNote, revisedReply)} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再通过" : ""}><ShieldCheck size={16} />{t.approve}</button>
             <button onClick={() => review("revise", reviewNote, revisedReply)} disabled={activeEscalation} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再修改" : ""}><Clock3 size={16} />{t.revise}</button>
             <button onClick={() => review(activeEscalation ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
               <UserCheck size={16} />{activeEscalation ? t.undoEscalate : t.escalate}
