@@ -497,16 +497,13 @@ function App() {
   const t = copy[locale];
   // 收件箱中把客服邮件和非客服邮件拆成两个可折叠列表：
   // 客服邮件用于处理和发送；非客服邮件只用于快速复核，避免通知类邮件干扰主流程。
-  const inboxEmails = emails.filter((email) => {
-    if (email.status === "irrelevant") return false;
-    if (currentUser?.role === "manager") return isEscalationInboxEmail(email);
-    return true;
-  });
-  const irrelevantEmails = currentUser?.role === "manager" ? [] : emails.filter((email) => email.status === "irrelevant");
+  const inboxEmails = emails.filter((email) => email.status !== "irrelevant");
+  const irrelevantEmails = emails.filter((email) => email.status === "irrelevant");
   const visibleInboxEmails = useMemo(() => [...inboxEmails, ...irrelevantEmails], [inboxEmails, irrelevantEmails]);
   const selected = useMemo(() => visibleInboxEmails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? irrelevantEmails[0] ?? emails[0], [emails, inboxEmails, irrelevantEmails, visibleInboxEmails, selectedId]);
   const reviewEmails = emails.filter((email) => {
     if (["irrelevant", "sent", "processed"].includes(email.status)) return false;
+    if (currentUser?.role === "manager") return isEscalationEmail(email);
     return ["human_review", "needs_revision", "escalated", "ready_to_send"].includes(email.status) || email.priority === "high";
   });
   const selectedReview = reviewEmails.find((email) => email.id === selectedId) ?? reviewEmails[0];
@@ -1269,7 +1266,7 @@ function hasActiveEscalation(email: EmailRecord) {
   return email.status === "escalated" || Boolean(email.escalation_ticket && ["open", "assigned"].includes(email.escalation_ticket.status));
 }
 
-function isEscalationInboxEmail(email: EmailRecord) {
+function isEscalationEmail(email: EmailRecord) {
   return hasActiveEscalation(email) || hasEscalationHistory(email);
 }
 
