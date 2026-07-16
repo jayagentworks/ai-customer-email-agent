@@ -1361,9 +1361,7 @@ h3 {
 }
 
 .queueSection + .queueSection {
-  border-top: 1px solid #e8edf2;
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 12px;
 }
 
 .queueSectionHeader {
@@ -1373,12 +1371,22 @@ h3 {
   background: #f7fafc;
   color: #234f82;
   cursor: pointer;
-  padding: 10px 12px;
+  padding: 9px 12px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   text-align: left;
+}
+
+.queueSection:not(.open) .queueSectionHeader {
+  background: #ffffff;
+  color: #42515c;
+}
+
+.queueSection.open .queueSectionHeader {
+  border-color: #c9ddeb;
+  background: #eef5fb;
 }
 
 .queueSectionHeader::before {
@@ -1406,7 +1414,7 @@ h3 {
 }
 
 .queueSectionHeader strong {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 750;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -1414,7 +1422,7 @@ h3 {
 
 .queueSectionHeader span {
   color: #60717f;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
   margin-top: 3px;
   overflow-wrap: anywhere;
