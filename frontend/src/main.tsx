@@ -17,7 +17,6 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   CheckCircle2,
   Clock3,
   Database,
@@ -1106,7 +1105,7 @@ function App() {
             />
             <div className="layout inboxLayout">
               <div className="moduleStack inboxStack">
-                <Composer t={t} form={form} setForm={setForm} loading={loading} syncing={syncing} loadEmails={loadEmails} syncQQMail={syncQQMail} processEmail={processEmail} />
+                <Composer t={t} form={form} setForm={setForm} loading={loading} processEmail={processEmail} />
                 <EmailQueue
                   title={t.inboxQueue}
                   hint={t.inboxQueueHint}
@@ -1114,6 +1113,9 @@ function App() {
                   selectedId={selected?.id}
                   locale={locale}
                   setSelectedId={setSelectedId}
+                  onRefresh={syncQQMail}
+                  refreshing={syncing}
+                  refreshTitle={t.refresh}
                   primaryTitle={locale === "zh" ? "客服邮件" : "Support emails"}
                   primaryHint={locale === "zh" ? "需要进入客服处理流程的邮件。" : "Emails that should enter the support workflow."}
                   secondaryTitle={locale === "zh" ? "非客服邮件复核" : "Non-support review"}
@@ -1679,20 +1681,16 @@ function KnowledgeHitCard({ hit, locale }: { hit: KnowledgeHit; locale: Locale }
   );
 }
 
-function Composer({ t, form, setForm, loading, syncing, loadEmails, syncQQMail, processEmail }: {
+function Composer({ t, form, setForm, loading, processEmail }: {
   t: Record<string, string>;
   form: { customer_name: string; customer_email: string; subject: string; body: string };
   setForm: React.Dispatch<React.SetStateAction<{ customer_name: string; customer_email: string; subject: string; body: string }>>;
   loading: boolean;
-  syncing: boolean;
-  loadEmails: () => void;
-  syncQQMail: () => void;
   processEmail: () => void;
 }) {
   return (
     <section className="composer">
-      <div className="sectionTitle"><span>{t.newEmail}</span><button className="iconButton" onClick={loadEmails} title={t.refresh}><RefreshCcw size={16} /></button></div>
-      <button className="secondaryButton" onClick={syncQQMail} disabled={syncing}><Mail size={16} />{syncing ? t.syncingQQ : t.syncQQ}</button>
+      <div className="sectionTitle"><span>{t.newEmail}</span></div>
       <label>{t.customer}<input value={form.customer_name} onChange={(event) => setForm({ ...form, customer_name: event.target.value })} /></label>
       <label>{t.email}<input value={form.customer_email} onChange={(event) => setForm({ ...form, customer_email: event.target.value })} /></label>
       <label>{t.subject}<input value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} /></label>
@@ -1717,6 +1715,9 @@ function EmailQueue({
   secondaryTitle,
   secondaryHint,
   secondaryEmails = [],
+  onRefresh,
+  refreshing = false,
+  refreshTitle,
 }: {
   title: string;
   hint: string;
@@ -1724,6 +1725,9 @@ function EmailQueue({
   selectedId?: string;
   locale: Locale;
   setSelectedId: (id: string) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  refreshTitle?: string;
   primaryTitle?: string;
   primaryHint?: string;
   secondaryTitle?: string;
@@ -1742,7 +1746,14 @@ function EmailQueue({
 
   return (
     <div className="queuePane">
-      <div className="queueHeader"><div><h3>{title}</h3><span>{hint}</span></div><BarChart3 size={18} /></div>
+      <div className="queueHeader">
+        <div><h3>{title}</h3><span>{hint}</span></div>
+        {onRefresh && (
+          <button className="iconButton" onClick={onRefresh} disabled={refreshing} title={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}>
+            <RefreshCcw size={16} />
+          </button>
+        )}
+      </div>
       <section className={`queueSection ${openQueueSection === "primary" ? "open" : ""}`}>
         <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "primary" ? "secondary" : "primary")}>
           <div><strong>{primaryTitle || title}</strong>{primaryHint && <span>{primaryHint}</span>}</div>
