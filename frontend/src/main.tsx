@@ -945,6 +945,11 @@ function App() {
         revised_reply: revisedReply,
       }),
     });
+    if (!response.ok) {
+      const error = await response.json();
+      window.alert(error.detail || "审核操作失败");
+      return;
+    }
     const updated = (await response.json()) as EmailRecord;
     setEmails((items) => items.map((item) => (item.id === updated.id ? updated : item)));
     await loadOperationLogs();
@@ -1236,6 +1241,10 @@ function hasEscalationHistory(email: EmailRecord) {
     return escalationActions[escalationActions.length - 1].action === "escalate";
   }
   return Boolean(email.escalation_ticket && ["open", "assigned", "resolved"].includes(email.escalation_ticket.status));
+}
+
+function hasActiveEscalation(email: EmailRecord) {
+  return email.status === "escalated" || Boolean(email.escalation_ticket && ["open", "assigned"].includes(email.escalation_ticket.status));
 }
 
 function canUserSendReply(user: UserProfile | null, email: EmailRecord) {
@@ -1747,6 +1756,7 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
   const metrics = normalizeAgentMetrics(selected.agent_metrics);
   const isGeneratingReply = regeneratingId === selected.id;
   const ticket = selected.escalation_ticket;
+  const activeEscalation = hasActiveEscalation(selected);
   const canHandleEscalation = currentUser?.role === "manager" || currentUser?.role === "admin";
 
   useEffect(() => {
@@ -1800,10 +1810,10 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
         <div className="replyHeader">
           <h3>{t.draftReply}</h3>
           {!isIrrelevant && <div className="reviewActions">
-            <button onClick={() => review("approve", reviewNote, revisedReply)}><ShieldCheck size={16} />{t.approve}</button>
-            <button onClick={() => review("revise", reviewNote, revisedReply)}><Clock3 size={16} />{t.revise}</button>
-            <button onClick={() => review(selected.status === "escalated" ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
-              <UserCheck size={16} />{selected.status === "escalated" ? t.undoEscalate : t.escalate}
+            <button onClick={() => review("approve", reviewNote, revisedReply)} disabled={activeEscalation} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再通过" : ""}><ShieldCheck size={16} />{t.approve}</button>
+            <button onClick={() => review("revise", reviewNote, revisedReply)} disabled={activeEscalation} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再修改" : ""}><Clock3 size={16} />{t.revise}</button>
+            <button onClick={() => review(activeEscalation ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
+              <UserCheck size={16} />{activeEscalation ? t.undoEscalate : t.escalate}
             </button>
             <button onClick={() => regenerateReply(selected.id)} disabled={regeneratingId === selected.id}>
               <RefreshCcw size={16} />{regeneratingId === selected.id ? t.regeneratingReply : t.regenerateReply}

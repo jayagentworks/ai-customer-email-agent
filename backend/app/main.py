@@ -162,6 +162,8 @@ def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
+    if payload.action in {"approve", "revise"} and has_active_escalation(email):
+        raise HTTPException(status_code=400, detail="请先撤销升级，或由客服主管处理升级工单后再审核")
 
     if payload.action == "approve":
         email.status = "ready_to_send"
@@ -230,6 +232,13 @@ def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser
         },
     )
     return store.get(email_id) or saved
+
+
+def has_active_escalation(email: EmailRecord) -> bool:
+    """判断邮件当前是否仍处在升级处理中。"""
+    if email.status == "escalated":
+        return True
+    return email.escalation_ticket is not None and email.escalation_ticket.status in {"open", "assigned"}
 
 
 @app.post("/emails/{email_id}/escalation", response_model=EmailRecord)
