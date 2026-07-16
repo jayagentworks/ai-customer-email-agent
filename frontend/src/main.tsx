@@ -501,8 +501,8 @@ function App() {
   const irrelevantEmails = emails.filter((email) => email.status === "irrelevant");
   const selected = useMemo(() => emails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? emails[0], [emails, inboxEmails, selectedId]);
   const reviewEmails = emails.filter((email) => {
-    if (["irrelevant", "sent", "processed", "ready_to_send"].includes(email.status)) return false;
-    return ["human_review", "needs_revision", "escalated"].includes(email.status) || email.priority === "high";
+    if (["irrelevant", "sent", "processed"].includes(email.status)) return false;
+    return ["human_review", "needs_revision", "escalated", "ready_to_send"].includes(email.status) || email.priority === "high";
   });
   const selectedReview = reviewEmails.find((email) => email.id === selectedId) ?? reviewEmails[0];
   const readyToSendEmails = emails.filter((email) => email.status === "ready_to_send");
