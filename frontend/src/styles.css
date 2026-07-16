@@ -1658,25 +1658,21 @@ h3 {
 }
 
 .reliabilityBadge {
-  border-radius: 999px;
-  padding: 4px 8px;
+  padding: 2px 0;
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;
 }
 
 .reliabilityBadge.strong {
-  background: #e8f5ee;
   color: #216142;
 }
 
 .reliabilityBadge.medium {
-  background: #edf5fb;
   color: #285982;
 }
 
 .reliabilityBadge.weak {
-  background: #eef1f4;
   color: #60717f;
 }
 
