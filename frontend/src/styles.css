@@ -574,12 +574,12 @@ h3 {
 }
 
 .inboxStack {
-  grid-template-rows: auto auto;
-  align-content: start;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
 .inboxStack .queuePane {
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -587,7 +587,7 @@ h3 {
 }
 
 .inboxStack .emailList {
-  max-height: calc(148px * 3 + 10px * 2);
+  max-height: calc(148px * 5 + 10px * 4);
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -1430,7 +1430,7 @@ h3 {
 }
 
 .inboxStack .queueSectionList {
-  max-height: 220px;
+  max-height: calc(148px * 5 + 10px * 4);
 }
 
 .secondaryEmailList {
