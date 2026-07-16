@@ -2096,13 +2096,41 @@ function formatWorkflowStep(step: WorkflowStep, locale: Locale) {
       summary: step.status === "blocked" ? "非客服邮件，已拦截" : "客服请求，继续处理",
       detail: "平台通知、安全提醒、营销邮件等非客服请求不会进入 RAG 检索和回复生成链路。",
     },
+    "Semantic relevance gate": {
+      name: "语义相关性复核",
+      summary: step.status === "blocked" ? "语义判断为非客服邮件" : "客服请求，继续处理",
+      detail: "在语义分析后再次检查是否属于平台通知、安全提醒、营销邮件或无明确客户诉求的邮件，避免无关邮件进入 RAG 和回复生成链路。",
+    },
   };
 
-  return zhSteps[step.name] ?? {
-    name: safeDisplayText(step.name, "未知步骤"),
-    summary: safeDisplayText(step.summary, "暂无步骤摘要"),
-    detail: safeDisplayText(step.detail, "暂无步骤说明"),
+  const translated = zhSteps[step.name];
+  if (translated) return translated;
+
+  return {
+    name: translateWorkflowText(step.name, "未知步骤"),
+    summary: translateWorkflowText(step.summary, "暂无步骤摘要"),
+    detail: translateWorkflowText(step.detail, "暂无步骤说明"),
   };
+}
+
+function translateWorkflowText(value?: string, fallback = "") {
+  const text = safeDisplayText(value, fallback);
+  const dictionary: Record<string, string> = {
+    "Customer support intent retained": "已保留客服请求",
+    "Human review required": "需要人工审核",
+    "Ready for one-click sending": "已进入一键确认发送",
+    "Found 0 relevant source(s)": "未召回相关知识库依据",
+    "Generated customer-ready draft": "已生成可审核回复草稿",
+    "Generated reply draft variant 1": "已生成第 1 版替代回复",
+    "Generated reply draft variant 2": "已生成第 2 版替代回复",
+    "Generated reply draft variant 3": "已生成第 3 版替代回复",
+    "Semantic analysis did not find a strong non-support signal, so the email can continue to RAG retrieval.": "语义分析未发现明确的非客服信号，邮件可以继续进入 RAG 检索。",
+    "Semantic analysis explicitly identified this email as non-support, marketing, notification, or without a customer issue.": "语义分析判断该邮件属于非客服、营销、通知或没有明确客户问题的邮件。",
+    "Semantic analysis identified this as a platform notification, marketing email, security alert, or message without a customer support request.": "语义分析判断该邮件属于平台通知、营销邮件、安全提醒或无客服诉求的邮件。",
+    "Draft generation used the customer email, classification result, and retrieved knowledge snippets as LLM context.": "回复生成使用了客户邮件、分类结果和已召回的可靠知识库依据作为上下文。",
+    "The operator requested another LLM-generated draft while keeping the same category, risk level, and knowledge grounding.": "操作人员请求重新生成回复，系统保留原有分类、风险等级和知识库依据。",
+  };
+  return dictionary[text] ?? text;
 }
 
 function safeEditableText(value?: string) {
