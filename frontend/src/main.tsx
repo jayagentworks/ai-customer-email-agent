@@ -838,6 +838,10 @@ function App() {
       window.alert("请先在审核队列中通过该回复，再发送邮件。");
       return;
     }
+    if (!canUserSendReply(currentUser, target)) {
+      window.alert("该邮件曾经升级处理过，需要客服主管或管理员发送回复。");
+      return;
+    }
     const confirmed = window.confirm(`确认通过 QQ SMTP 发送给 ${target.customer_email} 吗？\n\n主题：Re: ${target.subject}`);
     if (!confirmed) return;
     setSendingId(emailId);
@@ -861,6 +865,10 @@ function App() {
   async function bulkSendReadyReplies() {
     // 批量发送只允许已全部查看过的低风险邮件，避免用户没看草稿就误发。
     if (readyToSendEmails.length === 0) return;
+    if (currentUser?.role === "agent" && readyToSendEmails.some(hasEscalationHistory)) {
+      window.alert("待发送列表中包含曾经升级处理过的邮件，请由客服主管或管理员发送。");
+      return;
+    }
     if (!canBulkSendReady) {
       window.alert(`请先逐封查看全部可发送邮件。当前已查看 ${viewedReadyCount}/${readyToSendEmails.length} 封。`);
       return;
@@ -1216,6 +1224,18 @@ function Topbar({ title, subtitle, t, emails, processedCount }: { title: string;
       </div>
     </div>
   );
+}
+
+function hasEscalationHistory(email: EmailRecord) {
+  // 曾经升级过的邮件即使后来撤回或通过，也要按更高风险链路处理。
+  // 前端用于禁用 agent 发送入口；后端也有同样校验，避免绕过页面限制。
+  return Boolean(email.escalation_ticket) || (email.review_actions || []).some((action) => action.action === "escalate" || action.action === "undo_escalate");
+}
+
+function canUserSendReply(user: UserProfile | null, email: EmailRecord) {
+  if (email.status !== "ready_to_send") return false;
+  if (user?.role === "agent" && hasEscalationHistory(email)) return false;
+  return true;
 }
 
 function KnowledgePage(props: {
@@ -1707,7 +1727,13 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
   const [revisedReply, setRevisedReply] = useState(safeEditableText(selected.draft_reply));
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
   const [showAllReviewHistory, setShowAllReviewHistory] = useState(false);
-  const canSend = selected.status === "ready_to_send";
+  const agentEscalationSendBlocked = currentUser?.role === "agent" && hasEscalationHistory(selected);
+  const canSend = canUserSendReply(currentUser, selected);
+  const sendDisabledTitle = selected.status !== "ready_to_send"
+    ? "请先审核通过后再发送"
+    : agentEscalationSendBlocked
+      ? "升级处理过的邮件需要客服主管或管理员发送"
+      : "";
   const attachments = selected.attachments || [];
   const reviewActions = selected.review_actions || [];
   const visibleReviewActions = showAllReviewHistory ? reviewActions : reviewActions.slice(-3);
@@ -1776,7 +1802,7 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
             <button onClick={() => regenerateReply(selected.id)} disabled={regeneratingId === selected.id}>
               <RefreshCcw size={16} />{regeneratingId === selected.id ? t.regeneratingReply : t.regenerateReply}
             </button>
-            <button onClick={() => sendReply(selected.id)} disabled={sendingId === selected.id || !canSend} title={canSend ? "" : "请先审核通过后再发送"}><Mail size={16} />{sendingId === selected.id ? t.sendingReply : t.sendReply}</button>
+            <button onClick={() => sendReply(selected.id)} disabled={sendingId === selected.id || !canSend} title={sendDisabledTitle}><Mail size={16} />{sendingId === selected.id ? t.sendingReply : t.sendReply}</button>
           </div>}
         </div>
         {isIrrelevant ? (

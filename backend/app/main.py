@@ -407,6 +407,8 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
         raise HTTPException(status_code=400, detail="Draft reply is empty")
     if email.status != "ready_to_send":
         raise HTTPException(status_code=400, detail="Email must be approved before sending")
+    if current_user.role == "agent" and has_escalation_history(email):
+        raise HTTPException(status_code=403, detail="升级处理过的邮件需要客服主管或管理员发送")
 
     try:
         email.draft_reply = sanitize_customer_reply(email.draft_reply)
@@ -436,6 +438,17 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
         },
     )
     return saved
+
+
+def has_escalation_history(email: EmailRecord) -> bool:
+    """判断邮件是否曾经进入过升级流程。
+
+    这里不只看当前状态，因为邮件可能已经从 ``escalated`` 被撤回或处理完成，
+    但只要历史上出现过升级动作，就说明它曾经被判定为需要更高权限介入。
+    """
+    if email.escalation_ticket is not None:
+        return True
+    return any(action.action in {"escalate", "undo_escalate"} for action in email.review_actions)
 
 
 @app.get("/knowledge/documents", response_model=list[KnowledgeDocument])
