@@ -1696,8 +1696,8 @@ function EmailQueue({
         )}
       </div>
       <section className={`queueSection ${openQueueSection === "primary" ? "open" : ""}`}>
-        <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "primary" ? "secondary" : "primary")}>
-          <div><strong>{primaryTitle || title}</strong>{primaryHint && <span>{primaryHint}</span>}</div>
+        <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "primary" ? "secondary" : "primary")} title={primaryHint}>
+          <div><strong>{primaryTitle || title}</strong></div>
           <small>{emails.length}</small>
         </button>
         {openQueueSection === "primary" && (
@@ -1709,8 +1709,8 @@ function EmailQueue({
       </section>
       {secondaryTitle && (
         <section className={`queueSection secondaryQueueSection ${openQueueSection === "secondary" ? "open" : ""}`}>
-          <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "secondary" ? "primary" : "secondary")}>
-            <div><strong>{secondaryTitle}</strong>{secondaryHint && <span>{secondaryHint}</span>}</div>
+          <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "secondary" ? "primary" : "secondary")} title={secondaryHint}>
+            <div><strong>{secondaryTitle}</strong></div>
             <small>{secondaryEmails.length}</small>
           </button>
           {openQueueSection === "secondary" && (
