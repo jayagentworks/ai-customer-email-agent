@@ -441,14 +441,17 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
 
 
 def has_escalation_history(email: EmailRecord) -> bool:
-    """判断邮件是否曾经进入过升级流程。
+    """判断邮件是否仍需要按升级邮件限制发送。
 
-    这里不只看当前状态，因为邮件可能已经从 ``escalated`` 被撤回或处理完成，
-    但只要历史上出现过升级动作，就说明它曾经被判定为需要更高权限介入。
+    如果客服人员误点升级后又撤销，最后一次升级相关动作会是
+    ``undo_escalate``，这类邮件应该恢复为普通审核邮件，允许 agent
+    在审核通过后发送。只有最后一次升级相关动作仍是 ``escalate``，
+    或存在未被撤销的升级工单时，才限制 agent 发送。
     """
-    if email.escalation_ticket is not None:
-        return True
-    return any(action.action in {"escalate", "undo_escalate"} for action in email.review_actions)
+    escalation_actions = [action for action in email.review_actions if action.action in {"escalate", "undo_escalate"}]
+    if escalation_actions:
+        return escalation_actions[-1].action == "escalate"
+    return email.escalation_ticket is not None and email.escalation_ticket.status in {"open", "assigned", "resolved"}
 
 
 @app.get("/knowledge/documents", response_model=list[KnowledgeDocument])

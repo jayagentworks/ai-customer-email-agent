@@ -1227,9 +1227,15 @@ function Topbar({ title, subtitle, t, emails, processedCount }: { title: string;
 }
 
 function hasEscalationHistory(email: EmailRecord) {
-  // 曾经升级过的邮件即使后来撤回或通过，也要按更高风险链路处理。
+  // 仍处于有效升级链路的邮件需要更高权限发送。
+  // 如果客服人员误点升级后又撤销，最后一次升级相关动作会是 undo_escalate，
+  // 此时恢复为普通审核邮件，agent 审核通过后可以发送。
   // 前端用于禁用 agent 发送入口；后端也有同样校验，避免绕过页面限制。
-  return Boolean(email.escalation_ticket) || (email.review_actions || []).some((action) => action.action === "escalate" || action.action === "undo_escalate");
+  const escalationActions = (email.review_actions || []).filter((action) => action.action === "escalate" || action.action === "undo_escalate");
+  if (escalationActions.length > 0) {
+    return escalationActions[escalationActions.length - 1].action === "escalate";
+  }
+  return Boolean(email.escalation_ticket && ["open", "assigned", "resolved"].includes(email.escalation_ticket.status));
 }
 
 function canUserSendReply(user: UserProfile | null, email: EmailRecord) {
