@@ -307,6 +307,7 @@ def is_corrupted_text(value: str | None) -> bool:
     random_cjk_like = cjk_count >= 30 and common_chinese_count / max(cjk_count, 1) < 0.08
     control_count = sum(1 for char in text if "\x80" <= char <= "\x9f")
     private_use_count = sum(1 for char in text if "\ue000" <= char <= "\uf8ff")
+    hangul_count = sum(1 for char in text if "\uac00" <= char <= "\ud7af")
     return (
         text == "�"
         or "�" in text
@@ -318,5 +319,6 @@ def is_corrupted_text(value: str | None) -> bool:
         or random_cjk_like
         or control_count >= 2
         or private_use_count >= 2
+        or hangul_count >= 2
         or question_count / max(len(text), 1) > 0.25
     )

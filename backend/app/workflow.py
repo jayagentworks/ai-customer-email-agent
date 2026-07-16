@@ -232,6 +232,33 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
     return {"email": email}
 
 
+def semantic_relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
+    """语义分析后的二次非客服门控。
+
+    第一层 ``relevance_gate`` 发生在 LLM 之前，用于省成本；但有些平台营销、
+    安全通知或系统提醒会包含 ``support``、``access``、``login`` 等泛化词，
+    仅靠前置规则可能被误放行。语义分析后如果已经判断出 category=other，
+    且 reason/risk_flags 指向“营销、通知、无客户问题”，这里会再次拦截，
+    防止继续进入 RAG 和回复生成。
+    """
+    email = state["email"]
+    should_filter, reason = should_filter_after_semantic_analysis(email)
+    if not should_filter:
+        email.steps.append(
+            WorkflowStep(
+                name="Semantic relevance gate",
+                status="complete",
+                summary="Customer support intent retained",
+                detail="Semantic analysis did not find a strong non-support signal, so the email can continue to RAG retrieval.",
+                confidence=0.84,
+            )
+        )
+        return {"email": email}
+
+    mark_irrelevant_email(email, reason, step_name="Semantic relevance gate", confidence=0.9)
+    return {"email": email}
+
+
 def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
     """非客服邮件过滤节点。
 
@@ -254,6 +281,17 @@ def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
         )
         return {"email": email}
 
+    mark_irrelevant_email(email, reason, step_name="Relevance gate", confidence=0.88)
+    return {"email": email}
+
+
+def route_after_relevance(state: EmailWorkflowState) -> WorkflowRoute:
+    """根据非客服过滤结果决定 LangGraph 后续路径。"""
+    return "irrelevant" if state["email"].status == "irrelevant" else "relevant"
+
+
+def mark_irrelevant_email(email: EmailRecord, reason: str, *, step_name: str, confidence: float) -> None:
+    """统一把邮件标记为非客服邮件，并清空后续回复相关结果。"""
     email.status = "irrelevant"
     email.category = "other"
     email.priority = "low"
@@ -266,19 +304,13 @@ def relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowState:
     email.review_note = "非客服业务邮件，已拦截，不生成回复。" if is_chinese_email else "Non-support email filtered out. No reply draft generated."
     email.steps.append(
         WorkflowStep(
-            name="Relevance gate",
+            name=step_name,
             status="blocked",
             summary="Non-support email filtered out",
             detail=reason,
-            confidence=0.88,
+            confidence=confidence,
         )
     )
-    return {"email": email}
-
-
-def route_after_relevance(state: EmailWorkflowState) -> WorkflowRoute:
-    """根据非客服过滤结果决定 LangGraph 后续路径。"""
-    return "irrelevant" if state["email"].status == "irrelevant" else "relevant"
 
 
 def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
@@ -293,13 +325,17 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
     sender = f"{email.customer_name} {email.customer_email}".lower()
     platform_senders = {
         "facebook", "facebookmail.com", "meta", "github", "google", "microsoft",
+        "openai", "chatgpt", "email.openai.com", "nvidia", "ngc", "aws", "amazon",
+        "stripe", "paypal", "apple", "icloud", "adobe", "atlassian", "slack",
         "notification", "notifications", "no-reply", "noreply", "donotreply",
-        "qq邮箱团队",
+        "newsletter", "updates", "qq邮箱团队",
     }
     platform_notification_terms = {
         "unsubscribe", "no-reply", "noreply", "notification", "notifications", "unread",
         "new notification", "security alert", "login alert", "new login", "verification code",
         "sudo email verification code", "email_forward_notice", "privacy", "newsletter",
+        "marketing", "promotion", "weekly update", "product update", "release notes",
+        "recommendation", "digest", "community update", "retiring", "deprecation",
         "terms of service", "service terms", "privacy settings", "recommendation available",
         "new recommendation", "default directory",
         "oauth application", "third-party oauth", "first-party github oauth",
@@ -307,7 +343,8 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
         "settings/security-log", "do not forward this email", "facebook.com",
         "github.com/settings", "github.com/contact", "meta platforms",
         "退订", "动态更新", "新通知", "条新通知", "查看通知", "通知中心",
-        "服务条款", "隐私设置", "更新后的", "推荐",
+        "服务条款", "隐私设置", "更新后的", "推荐", "营销", "推广", "周报", "月报",
+        "产品更新", "版本更新", "功能更新", "摘要", "即将停用", "退役", "下线",
         "登录提醒", "安全提醒", "验证码", "请勿转发", "如果不希望再收到", "了解详情",
     }
     direct_customer_request_terms = {
@@ -317,6 +354,13 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
         "duplicate charge", "charged twice", "pro plan", "workspace issue",
         "请问", "请帮", "帮我", "协助", "需要帮助", "无法", "不能", "失败",
         "退款", "退费", "发票", "账单", "重复扣费", "重复收费", "套餐", "工作区",
+    }
+    strong_business_request_terms = {
+        "please refund", "refund request", "invoice question", "billing issue",
+        "cannot log in", "can't log in", "unable to access", "failed to access",
+        "duplicate charge", "charged twice", "pro plan", "workspace issue",
+        "退款", "退费", "发票", "账单", "重复扣费", "重复收费", "套餐", "工作区",
+        "无法登录", "不能登录", "访问失败", "权限管理", "审计日志",
     }
     security_notification_terms = {
         "oauth application", "third-party oauth", "first-party github oauth",
@@ -328,6 +372,7 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
     from_platform = any(term in sender for term in platform_senders)
     has_notification_signal = any(term in text or term in sender for term in platform_notification_terms)
     has_direct_customer_request = any(term in text for term in direct_customer_request_terms)
+    has_strong_business_request = any(term in text for term in strong_business_request_terms)
     has_platform_security_signal = from_platform and any(term in text for term in security_notification_terms)
     has_policy_update_signal = any(
         term in text
@@ -338,6 +383,8 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
         return False, "Detected platform security notification without a customer support request."
     if from_platform and has_policy_update_signal:
         return False, "Detected platform policy, privacy, or recommendation notification without a customer support request."
+    if from_platform and not has_strong_business_request:
+        return False, "Detected platform sender without a strong customer business request."
     if (from_platform or has_notification_signal) and not has_direct_customer_request:
         return False, "Detected platform notification, security alert, newsletter, or unsubscribe-style email without a direct customer support request."
 
@@ -367,6 +414,46 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
     if email.category == "other" and email.confidence < 0.7 and not has_support_intent:
         return False, "The email does not contain a clear customer support intent."
     return True, "The email contains customer support intent."
+
+
+def should_filter_after_semantic_analysis(email: EmailRecord) -> tuple[bool, str]:
+    """根据语义分析结果判断是否应二次拦截非客服邮件。"""
+    email_context = build_email_context(email).lower()
+    semantic_text = f"{email.analysis_reason}\n{' '.join(email.risk_flags)}".lower()
+    text = f"{email_context}\n{semantic_text}"
+    sender = f"{email.customer_name} {email.customer_email}".lower()
+    non_support_signals = {
+        "marketing", "promotion", "newsletter", "notification", "platform notification",
+        "security alert", "verification code", "oauth application", "policy update",
+        "privacy settings", "terms of service", "recommendation", "digest",
+        "no customer issue", "without a customer support request", "no customer support",
+        "no direct customer request", "openai marketing", "product update",
+        "system notification", "does not involve customer support", "not a customer support request",
+        "营销", "推广", "通知", "平台通知", "安全提醒", "验证码", "隐私设置",
+        "服务条款", "推荐", "无客户问题", "没有客户问题", "无客服问题",
+        "无客户诉求", "没有客户诉求", "非客服", "营销邮件", "系统通知",
+        "不涉及客户支持", "不涉及任何客户支持问题", "不涉及客服",
+    }
+    platform_sender_signals = {
+        "noreply", "no-reply", "notification", "openai", "chatgpt", "github", "facebook",
+        "google", "microsoft", "nvidia", "ngc", "qq邮箱团队", "newsletter", "updates",
+    }
+    direct_customer_request_terms = {
+        "please refund", "refund request", "charged twice", "duplicate charge", "invoice question",
+        "billing issue", "cannot log in", "can't log in", "unable to access", "please help",
+        "i need help", "we need help", "请帮", "帮我", "需要帮助", "无法", "不能",
+        "退款", "退费", "发票", "账单", "重复扣费", "重复收费", "套餐", "工作区",
+    }
+
+    has_non_support_signal = any(signal in text or signal in sender for signal in non_support_signals)
+    has_semantic_non_support_signal = any(signal in semantic_text for signal in non_support_signals)
+    from_platform = any(signal in sender for signal in platform_sender_signals)
+    has_direct_request = any(term in email_context for term in direct_customer_request_terms)
+    if email.category == "other" and has_semantic_non_support_signal:
+        return True, "Semantic analysis explicitly identified this email as non-support, marketing, notification, or without a customer issue."
+    if email.category == "other" and (has_non_support_signal or from_platform) and not has_direct_request:
+        return True, "Semantic analysis identified this as a platform notification, marketing email, security alert, or message without a customer support request."
+    return False, ""
 
 
 def retrieve_node(state: EmailWorkflowState) -> EmailWorkflowState:
@@ -809,6 +896,7 @@ def review_node(state: EmailWorkflowState) -> EmailWorkflowState:
     can_prepare_to_send = (
         email.risk_level == "low"
         and not email.should_escalate
+        and email.category not in {None, "other"}
         and email.confidence >= 0.7
         and bool(email.knowledge_hits)
     )
@@ -838,6 +926,7 @@ def build_email_workflow():
     graph.add_node("preprocess", preprocess_node)
     graph.add_node("semantic_analysis", semantic_analysis_node)
     graph.add_node("relevance_gate", relevance_gate_node)
+    graph.add_node("semantic_relevance_gate", semantic_relevance_gate_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("draft", draft_node)
     graph.add_node("review", review_node)
@@ -845,7 +934,8 @@ def build_email_workflow():
     graph.add_edge(START, "preprocess")
     graph.add_edge("preprocess", "relevance_gate")
     graph.add_conditional_edges("relevance_gate", route_after_relevance, {"irrelevant": END, "relevant": "semantic_analysis"})
-    graph.add_edge("semantic_analysis", "retrieve")
+    graph.add_edge("semantic_analysis", "semantic_relevance_gate")
+    graph.add_conditional_edges("semantic_relevance_gate", route_after_relevance, {"irrelevant": END, "relevant": "retrieve"})
     graph.add_edge("retrieve", "draft")
     graph.add_edge("draft", "review")
     graph.add_edge("review", END)
@@ -865,6 +955,7 @@ def get_workflow_architecture() -> dict:
             {"id": "preprocess", "role": "low-cost language, attachment, and risk-signal preprocessing"},
             {"id": "relevance_gate", "role": "filter platform notifications and non-support emails before LLM/RAG"},
             {"id": "semantic_analysis", "role": "LLM-first category, confidence, and risk analysis with rule fallback"},
+            {"id": "semantic_relevance_gate", "role": "second-pass non-support filter after semantic analysis"},
             {"id": "retrieve", "role": "hybrid RAG retrieval over the knowledge base"},
             {"id": "draft", "role": "LLM-first customer reply drafting with structured fallback"},
             {"id": "review", "role": "human-in-the-loop routing and one-click-send decision"},
@@ -874,7 +965,9 @@ def get_workflow_architecture() -> dict:
             ("preprocess", "relevance_gate"),
             ("relevance_gate", "END", "irrelevant"),
             ("relevance_gate", "semantic_analysis", "relevant"),
-            ("semantic_analysis", "retrieve"),
+            ("semantic_analysis", "semantic_relevance_gate"),
+            ("semantic_relevance_gate", "END", "irrelevant"),
+            ("semantic_relevance_gate", "retrieve", "relevant"),
             ("retrieve", "draft"),
             ("draft", "review"),
             ("review", "END"),

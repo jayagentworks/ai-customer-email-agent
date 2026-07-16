@@ -243,20 +243,70 @@ def decode_bytes(payload: bytes, charset: str | None = None) -> str:
 
 
 def repair_mojibake_text(text: str) -> str:
+    """修复常见邮件乱码。
+
+    QQ/网易/企业邮箱转发链路里经常会出现两类问题：
+    1. UTF-8 字节被 Latin1/CP1252 当成文本保存，例如 ``ä½ å¥½``；
+    2. GBK/GB18030 中文先被 Latin1 当成文本，又在后续链路里被 UTF-8/Latin1 再错一次，
+       例如 ``ÃÄÃ£`` 这类双层乱码。
+
+    所以这里不只做一次转换，而是用小范围 BFS 生成多轮候选，再用文本质量评分选择
+    最像真实中文/英文邮件、最不像乱码的一版。
+    """
     if not text:
         return text
-    best_text = text
-    best_score = score_decoded_text(text)
-    for source_encoding in ("utf-16le", "gb18030", "gbk", "big5", "latin-1", "cp1252"):
+
+    original_score = score_decoded_text(text)
+    strong_mojibake_signal = has_latin1_mojibake_signal(text) or mojibake_score(text) >= 3
+    max_rounds = 3 if strong_mojibake_signal else 1
+    candidates = {text}
+    frontier = {text}
+
+    # 第一组处理“错误文本其实是某种字节序列被 Latin1/CP1252 直接映射成了字符”的情况。
+    source_encodings = ("latin-1", "cp1252")
+    target_encodings = ("utf-8", "utf-8-sig", "gb18030", "gbk", "gb2312", "big5")
+
+    for _ in range(max_rounds):
+        next_frontier: set[str] = set()
+        for item in frontier:
+            for source_encoding in source_encodings:
+                try:
+                    raw = item.encode(source_encoding)
+                except (LookupError, UnicodeEncodeError):
+                    continue
+                for target_encoding in target_encodings:
+                    try:
+                        candidate = raw.decode(target_encoding)
+                    except (LookupError, UnicodeDecodeError):
+                        continue
+                    if candidate and candidate not in candidates:
+                        candidates.add(candidate)
+                        next_frontier.add(candidate)
+        if not next_frontier:
+            break
+        frontier = next_frontier
+
+    # 第二组保留旧逻辑，用于少量“先按 GBK/Big5/UTF-16 错转，再应还原为 UTF-8”的边界样本。
+    for source_encoding in ("utf-16le", "gb18030", "gbk", "big5"):
         try:
-            candidate = text.encode(source_encoding).decode("utf-8")
+            candidates.add(text.encode(source_encoding).decode("utf-8"))
         except (UnicodeEncodeError, UnicodeDecodeError):
             continue
-        score = score_decoded_text(candidate)
-        if score > best_score + 10:
-            best_text = candidate
-            best_score = score
-    return best_text
+
+    best_text = max(candidates, key=score_decoded_text)
+    best_score = score_decoded_text(best_text)
+    if strong_mojibake_signal and best_score > original_score:
+        return best_text
+    if best_score > original_score + 10:
+        return best_text
+    return text
+
+
+def has_latin1_mojibake_signal(text: str) -> bool:
+    """判断文本是否像 UTF-8 字节被 Latin1/CP1252 错解后的结果。"""
+    if any("\x80" <= char <= "\x9f" for char in text):
+        return True
+    return bool(re.search(r"[ÃÂÄÅÆÇÈÉ][\x80-\xff]", text)) or bool(re.search(r"(?:Ã.|Â.|Ä.|Å.){2,}", text))
 
 
 def mojibake_score(text: str) -> int:
@@ -285,6 +335,8 @@ COMMON_ENGLISH_WORDS = {
 def utf16_ascii_pair_score(text: str) -> int:
     suspicious = 0
     for char in text:
+        if "\u4e00" <= char <= "\u9fff":
+            continue
         code = ord(char)
         low = code & 0xFF
         high = code >> 8
@@ -316,10 +368,13 @@ def score_decoded_text(text: str) -> int:
     question_run_penalty = text.count("????") * 10
     utf16_pair_penalty = utf16_ascii_pair_score(text) * 80
     mojibake_penalty = mojibake_score(text) * 35
+    latin1_mojibake_penalty = len(re.findall(r"(?:Ã.|Â.|Ä.|Å.|ä.|å.|æ.|ç.|è.|é.){2,}", text)) * 45
     latin1_byte_penalty = 0
     latin1_extended_count = sum(1 for char in text if 0x80 <= ord(char) <= 0xFF)
     if latin1_extended_count >= 4:
         latin1_byte_penalty = latin1_extended_count * 12
+    hangul_count = sum(1 for char in text if "\uac00" <= char <= "\ud7af")
+    private_use_count = sum(1 for char in text if "\ue000" <= char <= "\uf8ff")
     cjk_count = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
     common_chinese_count = sum(1 for char in text if char in COMMON_CHINESE_CHARS)
     # 错误编码经常会产生大量“看似中文但不成句”的罕见汉字。真实中文邮件里，
@@ -343,8 +398,11 @@ def score_decoded_text(text: str) -> int:
         - question_run_penalty
         - utf16_pair_penalty
         - mojibake_penalty
+        - latin1_mojibake_penalty
         - random_cjk_penalty
         - latin1_byte_penalty
+        - hangul_count * 12
+        - private_use_count * 20
     )
 
 
