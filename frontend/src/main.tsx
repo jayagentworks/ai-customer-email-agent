@@ -1770,11 +1770,9 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
           {!isIrrelevant && <div className="reviewActions">
             <button onClick={() => review("approve", reviewNote, revisedReply)}><ShieldCheck size={16} />{t.approve}</button>
             <button onClick={() => review("revise", reviewNote, revisedReply)}><Clock3 size={16} />{t.revise}</button>
-            {(selected.status !== "escalated" || canHandleEscalation) && (
-              <button onClick={() => review(selected.status === "escalated" ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
-                <UserCheck size={16} />{selected.status === "escalated" ? t.undoEscalate : t.escalate}
-              </button>
-            )}
+            <button onClick={() => review(selected.status === "escalated" ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
+              <UserCheck size={16} />{selected.status === "escalated" ? t.undoEscalate : t.escalate}
+            </button>
             <button onClick={() => regenerateReply(selected.id)} disabled={regeneratingId === selected.id}>
               <RefreshCcw size={16} />{regeneratingId === selected.id ? t.regeneratingReply : t.regenerateReply}
             </button>

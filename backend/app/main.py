@@ -175,8 +175,6 @@ def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser
         email.status = "escalated"
         email.review_note = payload.note or default_review_note(email.detected_language, "escalate")
     else:
-        if current_user.role not in {"admin", "manager"}:
-            raise HTTPException(status_code=403, detail="Only manager or admin can undo an escalation")
         email.status = "human_review"
         email.review_note = payload.note or default_review_note(email.detected_language, "undo_escalate")
 
