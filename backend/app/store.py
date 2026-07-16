@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db import SessionLocal, init_db
 from app.db_models import EmailORM, ReviewActionORM, WorkflowStepORM
+from app.mail_client import mojibake_score
 from app.models import AgentMetrics, EmailAttachment, EmailCreate, EmailRecord, KnowledgeHit, ReviewAction, ReviewActionRecord, WorkflowStep
 
 
@@ -300,6 +301,10 @@ def is_corrupted_text(value: str | None) -> bool:
         "閫", "氱", "洿", "规", "嵁", "涓", "湪", "瀹", "㈡", "湇",
     )
     marker_count = sum(text.count(marker) for marker in mojibake_markers)
+    cjk_count = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
+    common_chinese = set("的一是在不了有和人这中大为上个我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经")
+    common_chinese_count = sum(1 for char in text if char in common_chinese)
+    random_cjk_like = cjk_count >= 30 and common_chinese_count / max(cjk_count, 1) < 0.08
     control_count = sum(1 for char in text if "\x80" <= char <= "\x9f")
     private_use_count = sum(1 for char in text if "\ue000" <= char <= "\uf8ff")
     return (
@@ -307,7 +312,10 @@ def is_corrupted_text(value: str | None) -> bool:
         or "�" in text
         or "????" in text
         or "锟" in text
+        or "瑞-偶" in text
         or marker_count >= 3
+        or mojibake_score(text) >= 4
+        or random_cjk_like
         or control_count >= 2
         or private_use_count >= 2
         or question_count / max(len(text), 1) > 0.25

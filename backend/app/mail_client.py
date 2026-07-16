@@ -172,13 +172,13 @@ def extract_plain_text(message: Message) -> str:
             payload = part.get_payload(decode=True)
             if not payload:
                 continue
-            text = clean_email_text(decode_bytes(payload, part.get_content_charset()))
+            text = clean_email_text(decode_bytes(payload, part.get_content_charset() or detect_inline_charset(payload)))
             if text:
                 candidates.append((score_email_text(text, content_type), text))
     else:
         payload = message.get_payload(decode=True)
         if payload:
-            text = clean_email_text(decode_bytes(payload, message.get_content_charset()))
+            text = clean_email_text(decode_bytes(payload, message.get_content_charset() or detect_inline_charset(payload)))
             if text:
                 return text
 
@@ -203,19 +203,31 @@ def clean_email_text(text: str) -> str:
     return cleaned.strip()
 
 
-def decode_bytes(payload: bytes, charset: str | None = None) -> str:
-    # Modern providers overwhelmingly send UTF-8. Prefer a strict UTF-8
-    # decode before comparing permissive legacy codecs: the same byte stream
-    # can be valid GBK/Big5 too, but decode into meaningless private-use text.
-    try:
-        return repair_mojibake_text(payload.decode("utf-8", errors="strict"))
-    except UnicodeDecodeError:
-        pass
+def detect_inline_charset(payload: bytes) -> str | None:
+    """从 HTML/XML 前几 KB 内容中识别内嵌 charset。
 
-    candidates = normalize_charset_candidates(charset)
+    部分邮件没有在 MIME part 头上声明 charset，却在 HTML ``meta`` 标签里声明。
+    这里先用 ASCII 忽略错误读取头部片段，只提取 charset 名称，不直接信任正文。
+    """
+    head = payload[:4096].decode("ascii", errors="ignore")
+    match = re.search(r"charset=[\"']?([A-Za-z0-9._-]+)", head, flags=re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def decode_bytes(payload: bytes, charset: str | None = None) -> str:
+    """把邮件字节解码成尽可能可靠的 Unicode 文本。
+
+    邮件乱码反复出现的根因通常不是“完全没有 charset”，而是：
+    - 邮件头声明了 GB2312/GBK，但正文实际是 UTF-8；
+    - 邮件服务商或转发链路把 UTF-8 字节错误地按 GBK/Big5 解码；
+    - HTML 正文和纯文本正文质量不同，第一段并不一定最可靠。
+
+    因此这里不再简单信任声明编码，而是让多个编码候选同时竞争，
+    用 ``score_decoded_text`` 选择最像真实自然语言、最不像乱码的结果。
+    """
     best_text = ""
-    best_score = -1
-    for candidate in candidates:
+    best_score = -10**9
+    for candidate in normalize_charset_candidates(charset):
         try:
             decoded = payload.decode(candidate, errors="strict")
         except (LookupError, UnicodeDecodeError):
@@ -250,15 +262,24 @@ def repair_mojibake_text(text: str) -> str:
 def mojibake_score(text: str) -> int:
     markers = (
         "锟", "閿", "�", "Ã", "Â", "¤", "¥", "¢", "ä", "å", "æ", "ç", "è", "é", "½", "¡",
-        "浣", "犲", "ソ",
+        "浣", "犲", "ソ", "瑕", "侀", "€", "锛", "冿", "紝",
         "鏂", "鎬", "煡", "鐪", "閫", "氱", "洿", "规", "嵁", "涓", "湪",
-        "娆", "瀹", "㈡", "湇", "绛", "伐", "佷", "叆", "妯",
+        "娆", "瀹", "㈡", "湇", "绛", "伐", "佷", "叆", "妯", "婊", "卞", "勭",
+        "瑞", "偶", "橱", "嫡", "皴", "仟", "软", "钧", "绮", "谩", "陲",
     )
     marker_score = sum(text.count(marker) for marker in markers)
     latin1_run_score = len(re.findall(r"[ÃÂ][\x80-\xffA-Za-z]{1,}", text))
     utf8_as_latin1_score = len(re.findall(r"[äåæçèé][\x80-\xffA-Za-z]{1,}", text))
     cjk_mojibake_run_score = len(re.findall(r"[浣犲ソ鏂鎬煡鐪嬫湁涓侀氱洿规嵁瀹㈡湇]{2,}", text))
     return marker_score + latin1_run_score * 3 + utf8_as_latin1_score * 3 + cjk_mojibake_run_score * 2
+
+
+COMMON_CHINESE_CHARS = set("的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海口东导器压志世金增争济阶油思术极交受联什认六共权收证改清美再采转更单风切打白教速花带安场身车例真务具万每目至达走积示议声报斗完类八离华名确才科张信马节话米整空元况今集温传土许步群广石记需段研界拉林律叫且究观越织装影算低持音众书布复容儿须际商非验连断深难近矿千周委素技备半办青省列习响约支般史感劳便团往酸历市克何除消构府称太准精值号率族维划选标写存候毛亲快效斯院查江型眼王按格养易置派层片始却专状育厂京识适属圆包火住调满县局照参红细引听该铁价严龙飞")
+COMMON_ENGLISH_WORDS = {
+    "the", "and", "for", "you", "your", "this", "that", "with", "from", "please", "thanks",
+    "account", "email", "support", "security", "login", "subscription", "refund", "invoice",
+    "team", "customer", "service", "plan", "access", "verify", "notification", "update",
+}
 
 
 def utf16_ascii_pair_score(text: str) -> int:
@@ -283,7 +304,8 @@ def normalize_charset_candidates(charset: str | None) -> list[str]:
             "cp936": ["gb18030", "gbk", "cp936"],
         }
         candidates.extend(aliases.get(normalized, [normalized]))
-    candidates.extend(["utf-8", "gb18030", "gbk", "big5", "utf-16", "latin-1"])
+    # UTF-8 放在候选里而不是提前返回，避免“错误但能解码”的文本跳过质量评分。
+    candidates.extend(["utf-8", "utf-8-sig", "gb18030", "gbk", "gb2312", "big5", "utf-16", "utf-16le", "utf-16be", "latin-1", "cp1252"])
     return list(dict.fromkeys(candidates))
 
 
@@ -294,10 +316,36 @@ def score_decoded_text(text: str) -> int:
     question_run_penalty = text.count("????") * 10
     utf16_pair_penalty = utf16_ascii_pair_score(text) * 80
     mojibake_penalty = mojibake_score(text) * 35
-    chinese_bonus = sum(1 for char in text if "\u4e00" <= char <= "\u9fff") * 2
+    latin1_byte_penalty = 0
+    latin1_extended_count = sum(1 for char in text if 0x80 <= ord(char) <= 0xFF)
+    if latin1_extended_count >= 4:
+        latin1_byte_penalty = latin1_extended_count * 12
+    cjk_count = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
+    common_chinese_count = sum(1 for char in text if char in COMMON_CHINESE_CHARS)
+    # 错误编码经常会产生大量“看似中文但不成句”的罕见汉字。真实中文邮件里，
+    # “的、一、是、我、你、请”等常用字比例通常不会太低。
+    random_cjk_penalty = 0
+    if cjk_count >= 20 and common_chinese_count / max(cjk_count, 1) < 0.08:
+        random_cjk_penalty = cjk_count * 4
+    chinese_bonus = common_chinese_count * 4
     readable_bonus = sum(1 for char in text if char.isprintable() or char in "\r\n\t")
     ascii_bonus = sum(1 for char in text if char.isascii() and (char.isalnum() or char in " .,;:/-_@<>")) * 2
-    return readable_bonus + chinese_bonus + ascii_bonus - replacement_penalty - question_run_penalty - utf16_pair_penalty - mojibake_penalty
+    words = re.findall(r"[A-Za-z]{2,}", text.lower())
+    english_bonus = sum(6 for word in words if word in COMMON_ENGLISH_WORDS)
+    url_email_bonus = len(re.findall(r"https?://|[\w.+-]+@[\w.-]+", text)) * 12
+    return (
+        readable_bonus
+        + chinese_bonus
+        + ascii_bonus
+        + english_bonus
+        + url_email_bonus
+        - replacement_penalty
+        - question_run_penalty
+        - utf16_pair_penalty
+        - mojibake_penalty
+        - random_cjk_penalty
+        - latin1_byte_penalty
+    )
 
 
 def score_email_text(text: str, content_type: str) -> int:
