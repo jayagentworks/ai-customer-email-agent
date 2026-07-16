@@ -1782,6 +1782,68 @@ pre {
   color: #7f1d1d;
 }
 
+.escalationBox {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #b8cce5;
+  background: #f4f8fd;
+  display: grid;
+  gap: 8px;
+}
+
+.escalationBox > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.escalationBox strong {
+  color: #174a7c;
+}
+
+.escalationBox span {
+  border-radius: 999px;
+  background: #e5eef8;
+  color: #174a7c;
+  font-weight: 700;
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.escalationBox p {
+  margin: 0;
+  color: #33424d;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.escalationBox small {
+  color: #60717f;
+}
+
+.escalationActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.escalationActions button {
+  border: 1px solid #cbd6e2;
+  background: #fff;
+  color: #174a7c;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+}
+
+.escalationActions button:hover {
+  border-color: #2b5689;
+  background: #eef5fc;
+}
+
 .reviewNote {
   margin: 12px 0 0;
   color: #174a7c;

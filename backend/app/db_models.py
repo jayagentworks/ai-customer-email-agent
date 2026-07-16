@@ -59,6 +59,11 @@ class EmailORM(Base):
         cascade="all, delete-orphan",
         order_by="ReviewActionORM.created_at",
     )
+    escalation_tickets: Mapped[list["EscalationTicketORM"]] = relationship(
+        back_populates="email",
+        cascade="all, delete-orphan",
+        order_by="EscalationTicketORM.created_at.desc()",
+    )
 
 
 class UserORM(Base):
@@ -116,6 +121,28 @@ class ReviewActionORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     email: Mapped[EmailORM] = relationship(back_populates="review_actions")
+
+
+class EscalationTicketORM(Base):
+    """升级工单表。
+
+    客服人员点击“升级处理”后，不只是给邮件打标签，而是在这里生成一条内部工单。
+    manager/admin 可以接单、处理完成或退回审核队列。
+    """
+
+    __tablename__ = "escalation_tickets"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    email_id: Mapped[str] = mapped_column(ForeignKey("emails.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="open", index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(80), default="")
+    assigned_to: Mapped[str] = mapped_column(String(80), default="")
+    resolution_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    email: Mapped[EmailORM] = relationship(back_populates="escalation_tickets")
 
 
 class OperationLogORM(Base):

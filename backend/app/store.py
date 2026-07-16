@@ -11,9 +11,9 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import SessionLocal, init_db
-from app.db_models import EmailORM, ReviewActionORM, WorkflowStepORM
+from app.db_models import EmailORM, EscalationTicketORM, ReviewActionORM, WorkflowStepORM
 from app.mail_client import mojibake_score
-from app.models import AgentMetrics, EmailAttachment, EmailCreate, EmailRecord, KnowledgeHit, ReviewAction, ReviewActionRecord, WorkflowStep
+from app.models import AgentMetrics, EmailAttachment, EmailCreate, EmailRecord, EscalationTicket, KnowledgeHit, ReviewAction, ReviewActionRecord, WorkflowStep
 
 
 class EmailStore:
@@ -36,7 +36,7 @@ class EmailStore:
         with SessionLocal() as session:
             rows = session.scalars(
                 select(EmailORM)
-                .options(selectinload(EmailORM.steps), selectinload(EmailORM.review_actions))
+                .options(selectinload(EmailORM.steps), selectinload(EmailORM.review_actions), selectinload(EmailORM.escalation_tickets))
                 .order_by(EmailORM.created_at.desc())
             ).all()
             return [self._to_record(row) for row in rows]
@@ -45,7 +45,7 @@ class EmailStore:
         with SessionLocal() as session:
             row = session.scalar(
                 select(EmailORM)
-                .options(selectinload(EmailORM.steps), selectinload(EmailORM.review_actions))
+                .options(selectinload(EmailORM.steps), selectinload(EmailORM.review_actions), selectinload(EmailORM.escalation_tickets))
                 .where(EmailORM.id == email_id)
             )
             return self._to_record(row) if row else None
@@ -116,6 +116,60 @@ class EmailStore:
                 )
             )
             session.commit()
+
+    def open_escalation_ticket(self, email_id: str, *, reason: str, created_by: str) -> EscalationTicket:
+        """为邮件创建或复用一条未关闭的升级工单。"""
+        with SessionLocal() as session:
+            ticket = session.scalar(
+                select(EscalationTicketORM)
+                .where(
+                    EscalationTicketORM.email_id == email_id,
+                    EscalationTicketORM.status.in_(("open", "assigned")),
+                )
+                .order_by(EscalationTicketORM.created_at.desc())
+            )
+            if ticket is None:
+                ticket = EscalationTicketORM(
+                    email_id=email_id,
+                    status="open",
+                    reason=reason,
+                    created_by=created_by,
+                )
+                session.add(ticket)
+            else:
+                ticket.reason = reason or ticket.reason
+                ticket.updated_at = datetime.utcnow()
+            session.commit()
+            session.refresh(ticket)
+            return self._ticket_to_model(ticket)
+
+    def update_escalation_ticket(self, email_id: str, *, action: str, note: str, operator: str) -> EscalationTicket:
+        """处理升级工单：接单、解决或退回审核。"""
+        with SessionLocal() as session:
+            ticket = session.scalar(
+                select(EscalationTicketORM)
+                .where(EscalationTicketORM.email_id == email_id)
+                .order_by(EscalationTicketORM.created_at.desc())
+            )
+            if ticket is None:
+                ticket = EscalationTicketORM(email_id=email_id, status="open", created_by=operator)
+                session.add(ticket)
+
+            if action == "assign":
+                ticket.status = "assigned"
+                ticket.assigned_to = operator
+            elif action == "resolve":
+                ticket.status = "resolved"
+                ticket.assigned_to = ticket.assigned_to or operator
+                ticket.resolution_note = note
+            elif action == "return_to_review":
+                ticket.status = "returned"
+                ticket.assigned_to = ticket.assigned_to or operator
+                ticket.resolution_note = note
+            ticket.updated_at = datetime.utcnow()
+            session.commit()
+            session.refresh(ticket)
+            return self._ticket_to_model(ticket)
 
     def cleanup_workflow_steps(self, retention_days: int = 30) -> int:
         """清理已结束邮件的旧执行轨迹。"""
@@ -244,6 +298,21 @@ class EmailStore:
                 )
                 for action in row.review_actions
             ],
+            escalation_ticket=EmailStore._ticket_to_model(row.escalation_tickets[0]) if row.escalation_tickets else None,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    def _ticket_to_model(row: EscalationTicketORM) -> EscalationTicket:
+        return EscalationTicket(
+            id=row.id,
+            email_id=row.email_id,
+            status=row.status,
+            reason=row.reason,
+            created_by=row.created_by,
+            assigned_to=row.assigned_to,
+            resolution_note=row.resolution_note,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )

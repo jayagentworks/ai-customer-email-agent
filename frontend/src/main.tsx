@@ -164,6 +164,18 @@ type ReviewActionRecord = {
   created_at: string;
 };
 
+type EscalationTicket = {
+  id: string;
+  email_id: string;
+  status: "open" | "assigned" | "resolved" | "returned";
+  reason: string;
+  created_by: string;
+  assigned_to: string;
+  resolution_note: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type AgentMetrics = {
   llm_calls: number;
   semantic_llm_calls: number;
@@ -194,6 +206,7 @@ type EmailRecord = {
   review_note: string;
   steps: WorkflowStep[];
   review_actions: ReviewActionRecord[];
+  escalation_ticket?: EscalationTicket | null;
   created_at: string;
   updated_at: string;
 };
@@ -930,6 +943,23 @@ function App() {
     setSelectedId(updated.id);
   }
 
+  async function updateEscalation(emailId: string, action: "assign" | "resolve" | "return_to_review", note = "") {
+    const response = await apiFetch(`${API_URL}/emails/${emailId}/escalation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, note }),
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      window.alert(error.detail || "升级工单处理失败");
+      return;
+    }
+    const updated = (await response.json()) as EmailRecord;
+    setEmails((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+    await loadOperationLogs();
+    setSelectedId(updated.id);
+  }
+
   useEffect(() => {
     // 页面初始化时一次性加载所有基础数据。
     if (!currentUser) return;
@@ -1057,7 +1087,7 @@ function App() {
                   secondaryEmails={irrelevantEmails}
                 />
               </div>
-              {selected && <EmailDetail selected={selected} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} />}
+              {selected && <EmailDetail selected={selected} currentUser={currentUser} locale={locale} t={t} review={review} updateEscalation={updateEscalation} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} />}
             </div>
           </>
         )}
@@ -1065,7 +1095,7 @@ function App() {
         {activeView === "review" && (
           <div className="reviewLayout">
             <EmailQueue title={t.navReview} hint={t.reviewSubtitle} emails={reviewEmails} selectedId={selectedReview?.id} locale={locale} setSelectedId={setSelectedId} />
-            {selectedReview ? <EmailDetail selected={selectedReview} locale={locale} t={t} review={review} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} /> : <EmptyModule title={t.navReview} text="当前没有需要审核的邮件。" />}
+            {selectedReview ? <EmailDetail selected={selectedReview} currentUser={currentUser} locale={locale} t={t} review={review} updateEscalation={updateEscalation} sendReply={sendReply} sendingId={sendingId} regenerateReply={regenerateReply} regeneratingId={regeneratingId} regenerateProgress={regenerateProgress} /> : <EmptyModule title={t.navReview} text="当前没有需要审核的邮件。" />}
           </div>
         )}
 
@@ -1659,12 +1689,14 @@ function EmailQueue({
   );
 }
 
-function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regenerateReply, regeneratingId, regenerateProgress }: {
+function EmailDetail({ selected, currentUser, locale, t, review, updateEscalation, sendReply, sendingId, regenerateReply, regeneratingId, regenerateProgress }: {
   // 邮件详情是人工审核的主工作台：展示原文、成本指标、草稿、风险、历史和执行流程。
   selected: EmailRecord;
+  currentUser: UserProfile | null;
   locale: Locale;
   t: Record<string, string>;
   review: (action: "approve" | "escalate" | "revise" | "undo_escalate", note?: string, revisedReply?: string) => void;
+  updateEscalation: (emailId: string, action: "assign" | "resolve" | "return_to_review", note?: string) => void;
   sendReply: (emailId: string) => void;
   sendingId: string;
   regenerateReply: (emailId: string) => void;
@@ -1682,6 +1714,8 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
   const isIrrelevant = selected.status === "irrelevant";
   const metrics = normalizeAgentMetrics(selected.agent_metrics);
   const isGeneratingReply = regeneratingId === selected.id;
+  const ticket = selected.escalation_ticket;
+  const canHandleEscalation = currentUser?.role === "manager" || currentUser?.role === "admin";
 
   useEffect(() => {
     setReviewNote(safeEditableText(selected.review_note));
@@ -1736,9 +1770,11 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
           {!isIrrelevant && <div className="reviewActions">
             <button onClick={() => review("approve", reviewNote, revisedReply)}><ShieldCheck size={16} />{t.approve}</button>
             <button onClick={() => review("revise", reviewNote, revisedReply)}><Clock3 size={16} />{t.revise}</button>
-            <button onClick={() => review(selected.status === "escalated" ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
-              <UserCheck size={16} />{selected.status === "escalated" ? t.undoEscalate : t.escalate}
-            </button>
+            {(selected.status !== "escalated" || canHandleEscalation) && (
+              <button onClick={() => review(selected.status === "escalated" ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
+                <UserCheck size={16} />{selected.status === "escalated" ? t.undoEscalate : t.escalate}
+              </button>
+            )}
             <button onClick={() => regenerateReply(selected.id)} disabled={regeneratingId === selected.id}>
               <RefreshCcw size={16} />{regeneratingId === selected.id ? t.regeneratingReply : t.regenerateReply}
             </button>
@@ -1772,6 +1808,27 @@ function EmailDetail({ selected, locale, t, review, sendReply, sendingId, regene
           </label>
         </div>}
         {!isIrrelevant && selected.risk_flags.length > 0 && <div className="riskBox"><strong>{t.riskFlags}</strong>{selected.risk_flags.map((flag) => <span key={flag}>{formatRiskFlag(flag, locale)}</span>)}</div>}
+        {!isIrrelevant && ticket && (
+          <div className="escalationBox">
+            <div>
+              <strong>{locale === "zh" ? "升级工单" : "Escalation ticket"}</strong>
+              <span>{formatEscalationStatus(ticket.status, locale)}</span>
+            </div>
+            <p>{safeDisplayText(ticket.reason || selected.review_note, locale === "zh" ? "暂无升级原因。" : "No escalation reason.")}</p>
+            <small>
+              {locale === "zh" ? "发起人" : "Created by"}：{ticket.created_by || "-"}
+              {ticket.assigned_to ? ` · ${locale === "zh" ? "处理人" : "Assignee"}：${ticket.assigned_to}` : ""}
+            </small>
+            {ticket.resolution_note && <p>{safeDisplayText(ticket.resolution_note)}</p>}
+            {canHandleEscalation && ticket.status !== "resolved" && ticket.status !== "returned" && (
+              <div className="escalationActions">
+                <button type="button" onClick={() => updateEscalation(selected.id, "assign", reviewNote || "升级工单已接单。")}>{locale === "zh" ? "接单" : "Assign to me"}</button>
+                <button type="button" onClick={() => updateEscalation(selected.id, "resolve", reviewNote || "升级问题已处理完成，退回审核确认。")}>{locale === "zh" ? "处理完成" : "Resolve"}</button>
+                <button type="button" onClick={() => updateEscalation(selected.id, "return_to_review", reviewNote || "升级工单退回审核队列。")}>{locale === "zh" ? "退回审核" : "Return"}</button>
+              </div>
+            )}
+          </div>
+        )}
         {!isIrrelevant && safeDisplayText(selected.review_note) && <p className="reviewNote">{safeDisplayText(selected.review_note)}</p>}
         {reviewActions.length > 0 && (
           <div className="reviewHistory">
@@ -1836,6 +1893,24 @@ const reviewActionLabels: Record<Locale, Record<ReviewActionRecord["action"], st
     undo_escalate: "撤销升级",
   },
 };
+
+function formatEscalationStatus(status: EscalationTicket["status"], locale: Locale) {
+  const labels: Record<Locale, Record<EscalationTicket["status"], string>> = {
+    zh: {
+      open: "待主管接单",
+      assigned: "处理中",
+      resolved: "已处理完成",
+      returned: "已退回审核",
+    },
+    en: {
+      open: "Open",
+      assigned: "Assigned",
+      resolved: "Resolved",
+      returned: "Returned",
+    },
+  };
+  return labels[locale][status];
+}
 
 const subjectZhMap: Record<string, string> = {
   "Cannot log in after password reset": "重置密码后无法登录",

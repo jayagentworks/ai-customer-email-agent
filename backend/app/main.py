@@ -46,6 +46,7 @@ from app.mail_client import MailClientConfigError, fetch_unread_qq_emails, send_
 from app.models import (
     EmailCreate,
     EmailRecord,
+    EscalationUpdate,
     KnowledgeDocument,
     KnowledgeDocumentCreate,
     KnowledgeDocumentDetail,
@@ -174,10 +175,46 @@ def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser
         email.status = "escalated"
         email.review_note = payload.note or default_review_note(email.detected_language, "escalate")
     else:
+        if current_user.role not in {"admin", "manager"}:
+            raise HTTPException(status_code=403, detail="Only manager or admin can undo an escalation")
         email.status = "human_review"
         email.review_note = payload.note or default_review_note(email.detected_language, "undo_escalate")
 
     saved = store.save(email)
+    if payload.action == "escalate":
+        ticket = store.open_escalation_ticket(email_id, reason=email.review_note, created_by=current_user.username)
+        saved = store.get(email_id) or saved
+        record_operation_log(
+            scope="email",
+            action="open_escalation_ticket",
+            title=email.subject,
+            summary=f"邮件「{email.subject}」已生成升级工单，等待客服主管处理。",
+            detail={
+                "operator": current_user.username,
+                "operator_role": current_user.role,
+                "email_id": email.id,
+                "ticket_id": ticket.id,
+                "ticket_status": ticket.status,
+                "reason": ticket.reason,
+            },
+        )
+    elif payload.action == "undo_escalate":
+        ticket = store.update_escalation_ticket(email_id, action="return_to_review", note=email.review_note, operator=current_user.username)
+        saved = store.get(email_id) or saved
+        record_operation_log(
+            scope="email",
+            action="return_escalation_ticket",
+            title=email.subject,
+            summary=f"邮件「{email.subject}」升级工单已退回审核队列。",
+            detail={
+                "operator": current_user.username,
+                "operator_role": current_user.role,
+                "email_id": email.id,
+                "ticket_id": ticket.id,
+                "ticket_status": ticket.status,
+                "note": email.review_note,
+            },
+        )
     store.record_review(email_id, payload)
     record_operation_log(
         scope="email",
@@ -192,6 +229,48 @@ def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser
             "action": payload.action,
             "status": saved.status,
             "has_revised_reply": bool(payload.revised_reply),
+        },
+    )
+    return store.get(email_id) or saved
+
+
+@app.post("/emails/{email_id}/escalation", response_model=EmailRecord)
+def update_email_escalation(email_id: str, payload: EscalationUpdate, current_user: CurrentUser) -> EmailRecord:
+    """客服主管处理升级工单。
+
+    agent 只能发起升级；manager/admin 可以接单、关闭工单或退回审核队列。
+    """
+    if current_user.role not in {"admin", "manager"}:
+        raise HTTPException(status_code=403, detail="Only manager or admin can handle escalation tickets")
+
+    email = store.get(email_id)
+    if not email:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    ticket = store.update_escalation_ticket(email_id, action=payload.action, note=payload.note, operator=current_user.username)
+    if payload.action == "assign":
+        email.status = "escalated"
+        email.review_note = payload.note or f"升级工单已由 {current_user.username} 接单。"
+    elif payload.action == "resolve":
+        email.status = "human_review"
+        email.review_note = payload.note or "升级工单已处理完成，邮件回到审核队列。"
+    else:
+        email.status = "human_review"
+        email.review_note = payload.note or "升级工单已退回，邮件回到人工审核队列。"
+
+    saved = store.save(email)
+    record_operation_log(
+        scope="email",
+        action=f"escalation_{payload.action}",
+        title=email.subject,
+        summary=f"邮件「{email.subject}」升级工单执行 {payload.action}，当前工单状态为 {ticket.status}。",
+        detail={
+            "operator": current_user.username,
+            "operator_role": current_user.role,
+            "email_id": email.id,
+            "ticket_id": ticket.id,
+            "ticket_status": ticket.status,
+            "note": payload.note,
         },
     )
     return store.get(email_id) or saved

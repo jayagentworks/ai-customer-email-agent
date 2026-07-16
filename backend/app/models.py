@@ -17,6 +17,7 @@ EmailStatus = Literal["new", "processed", "human_review", "ready_to_send", "need
 RiskLevel = Literal["low", "medium", "high"]
 ReviewActionType = Literal["approve", "revise", "escalate", "undo_escalate"]
 KnowledgeDocumentStatus = Literal["processing", "indexed", "failed", "needs_reindex"]
+EscalationStatus = Literal["open", "assigned", "resolved", "returned"]
 
 
 class EmailCreate(BaseModel):
@@ -146,6 +147,20 @@ class ReviewActionRecord(BaseModel):
     created_at: datetime
 
 
+class EscalationTicket(BaseModel):
+    """邮件升级后生成的内部处理工单。"""
+
+    id: str
+    email_id: str
+    status: EscalationStatus = "open"
+    reason: str = ""
+    created_by: str = ""
+    assigned_to: str = ""
+    resolution_note: str = ""
+    created_at: datetime
+    updated_at: datetime
+
+
 class EmailRecord(BaseModel):
     """系统中完整的一封邮件记录。"""
 
@@ -173,6 +188,7 @@ class EmailRecord(BaseModel):
     review_note: str = ""
     steps: list[WorkflowStep] = Field(default_factory=list)
     review_actions: list[ReviewActionRecord] = Field(default_factory=list)
+    escalation_ticket: EscalationTicket | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -181,3 +197,8 @@ class ReviewAction(BaseModel):
     action: ReviewActionType
     note: str = ""
     revised_reply: str = ""
+
+
+class EscalationUpdate(BaseModel):
+    action: Literal["assign", "resolve", "return_to_review"]
+    note: str = ""
