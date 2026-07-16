@@ -941,9 +941,13 @@ function App() {
       window.alert("该邮件正在升级处理中，请先撤销升级，或由客服主管处理升级工单后再通过。");
       return;
     }
-    if (action === "approve" && currentUser?.role === "agent" && hasEscalationHistory(target)) {
-      window.alert("该邮件已经被升级处理，客服人员不能发送回复，请由客服主管或管理员处理。");
-      return;
+    if (action === "approve" && hasEscalationHistory(target)) {
+      if (currentUser?.role === "agent") {
+        window.alert("该邮件已经被升级处理，客服人员不能发送回复，请由客服主管或管理员处理。");
+        return;
+      }
+      const confirmed = window.confirm("该邮件有升级处理记录，通过后需要由客服主管或管理员负责发送。确认继续通过吗？");
+      if (!confirmed) return;
     }
     if (action === "revise" && hasActiveEscalation(target)) {
       window.alert("该邮件正在升级处理中，请先撤销升级，或由客服主管处理升级工单后再修改。");
