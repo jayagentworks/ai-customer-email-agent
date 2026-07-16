@@ -1834,7 +1834,6 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
           <h3>{t.draftReply}</h3>
           {!isIrrelevant && <div className="reviewActions">
             <button onClick={() => review("approve", reviewNote, revisedReply)} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再通过" : ""}><ShieldCheck size={16} />{t.approve}</button>
-            <button onClick={() => review("revise", reviewNote, revisedReply)} disabled={activeEscalation} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再修改" : ""}><Clock3 size={16} />{t.revise}</button>
             <button onClick={() => review(activeEscalation ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
               <UserCheck size={16} />{activeEscalation ? t.undoEscalate : t.escalate}
             </button>
