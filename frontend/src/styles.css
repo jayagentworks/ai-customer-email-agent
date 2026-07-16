@@ -1361,22 +1361,25 @@ h3 {
 }
 
 .queueSection + .queueSection {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .queueSectionHeader {
+  box-sizing: border-box;
   width: 100%;
+  min-height: 72px;
   border: 1px solid #dce5ee;
   border-radius: 8px;
   background: #f7fafc;
   color: #234f82;
   cursor: pointer;
-  padding: 9px 12px;
+  padding: 10px 12px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   text-align: left;
+  overflow: hidden;
 }
 
 .queueSection:not(.open) .queueSectionHeader {
@@ -1426,6 +1429,10 @@ h3 {
   line-height: 1.4;
   margin-top: 3px;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .queueSectionHeader small {
