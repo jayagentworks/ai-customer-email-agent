@@ -586,6 +586,12 @@ h3 {
   overflow: hidden;
 }
 
+.inboxStack .queuePane.secondaryOpen {
+  height: auto;
+  max-height: 100%;
+  align-self: start;
+}
+
 .inboxStack .emailList {
   max-height: calc(148px * 5 + 10px * 4);
   overflow-y: auto;

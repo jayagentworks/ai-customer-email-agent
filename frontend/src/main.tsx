@@ -1680,7 +1680,7 @@ function EmailQueue({
   );
 
   return (
-    <div className="queuePane">
+    <div className={`queuePane ${openQueueSection === "secondary" ? "secondaryOpen" : "primaryOpen"}`}>
       <div className="queueHeader">
         <div><h3>{title}</h3><span>{hint}</span></div>
         {onRefresh && (
