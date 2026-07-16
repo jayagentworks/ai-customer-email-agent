@@ -668,6 +668,7 @@ def readable_ratio(text: str) -> float:
 
 def clean_inline_text(text: str) -> str:
     """清理单行文本中的连续空白。"""
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -878,6 +879,8 @@ def extract_title(text: str, fallback: str) -> str:
     for line in text.splitlines():
         stripped = line.strip("# ").strip()
         if stripped and not is_noise_line(stripped):
+            if len(stripped) > 80:
+                break
             return stripped[:120]
     return fallback.replace("_", " ").replace("-", " ").title()
 
