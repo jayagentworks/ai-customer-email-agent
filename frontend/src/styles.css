@@ -583,17 +583,18 @@ h3 {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   overflow: hidden;
 }
 
 .inboxStack .queueSection {
+  flex: 0 0 auto;
   min-height: 0;
 }
 
 .inboxStack .queueSection.open {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
   min-height: 0;
 }
@@ -1358,6 +1359,7 @@ h3 {
 
 .queueSection {
   display: block;
+  flex-shrink: 0;
   min-height: 0;
 }
 
@@ -1367,20 +1369,20 @@ h3 {
 
 .queueSectionHeader {
   box-sizing: border-box;
+  flex: 0 0 auto;
   width: 100%;
-  height: 52px;
+  min-height: 70px;
   border: 1px solid #dce5ee;
   border-radius: 8px;
   background: #f7fafc;
   color: #234f82;
   cursor: pointer;
-  padding: 0 12px;
+  padding: 10px 12px;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   text-align: left;
-  overflow: hidden;
 }
 
 .queueSection:not(.open) .queueSectionHeader {
@@ -1418,12 +1420,18 @@ h3 {
 }
 
 .queueSectionHeader strong {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 750;
   line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.queueSectionHeader span {
+  color: #60717f;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
 }
 
 .queueSectionHeader small {
