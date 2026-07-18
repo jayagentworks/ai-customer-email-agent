@@ -172,7 +172,7 @@ class EmailRecord(BaseModel):
     subject: str
     body: str
     attachments: list[EmailAttachment] = Field(default_factory=list)
-    provider: Literal["manual", "qq"] = "manual"
+    provider: Literal["manual", "qq", "outlook", "gmail"] = "manual"
     provider_message_id: str = ""
     category: EmailCategory | None = None
     priority: RiskLevel = "medium"
@@ -204,3 +204,52 @@ class ReviewAction(BaseModel):
 class EscalationUpdate(BaseModel):
     action: Literal["assign", "resolve", "return_to_review"]
     note: str = ""
+
+
+MailProvider = Literal["qq", "outlook", "gmail"]
+
+
+class MailSourceConfigInput(BaseModel):
+    """管理员提交的邮件源配置。
+
+    密钥字段允许留空，表示继续沿用服务器现有配置；这样编辑主机或邮箱地址时
+    不需要把旧密钥返回到浏览器。
+    """
+
+    provider: MailProvider
+    email_address: str = ""
+    credential: str = ""
+    imap_host: str = ""
+    imap_port: int | None = None
+    smtp_host: str = ""
+    smtp_port: int | None = None
+    tenant_id: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = ""
+
+
+class MailSourceInfo(BaseModel):
+    provider: MailProvider
+    label: str
+    active: bool = False
+    configured: bool = False
+    secret_configured: bool = False
+    email_address: str = ""
+    imap_host: str = ""
+    imap_port: int | None = None
+    smtp_host: str = ""
+    smtp_port: int | None = None
+    tenant_id: str = ""
+    client_id: str = ""
+    redirect_uri: str = ""
+
+
+class MailSourceState(BaseModel):
+    active_provider: MailProvider
+    sources: list[MailSourceInfo]
+
+
+class MailSourceSwitchResult(BaseModel):
+    message: str
+    state: MailSourceState

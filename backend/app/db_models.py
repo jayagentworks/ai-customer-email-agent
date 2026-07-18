@@ -162,6 +162,22 @@ class OperationLogORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class MailSourceConfigORM(Base):
+    """邮件源配置表。
+
+    普通连接参数保存在 ``config`` 中；授权码、应用密码和客户端密钥经过
+    Fernet 加密后写入 ``encrypted_secrets``，接口不会返回密文或明文。
+    """
+
+    __tablename__ = "mail_source_configs"
+
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    encrypted_secrets: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class KnowledgeDocumentORM(Base):
     """知识库文档主表。"""
 

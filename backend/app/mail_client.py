@@ -50,23 +50,55 @@ class ImportedMail:
     provider_message_id: str
 
 
+@dataclass(frozen=True)
+class ImapSmtpSettings:
+    """QQ/Gmail 共用的 IMAP 与 SMTP 连接参数。"""
+
+    provider: str
+    email_address: str
+    credential: str
+    imap_host: str
+    imap_port: int
+    smtp_host: str
+    smtp_port: int
+    timeout: float = 20.0
+    search_criteria: str = "ALL"
+
+
 def fetch_unread_qq_emails(limit: int = 5, known_message_ids: set[str] | None = None) -> list[ImportedMail]:
     """从 QQ 邮箱拉取最近的邮件。
 
     当前默认搜索条件是 ``ALL``，再结合 ``known_message_ids`` 做本地去重。
     使用 ``BODY.PEEK[]`` 是为了读取邮件内容时不主动改变邮箱中的已读状态。
     """
-    address = required_env("QQ_EMAIL_ADDRESS")
-    auth_code = required_env("QQ_EMAIL_AUTH_CODE")
-    host = os.getenv("QQ_IMAP_HOST", "imap.qq.com")
-    port = int(os.getenv("QQ_IMAP_PORT", "993"))
-    timeout = float(os.getenv("QQ_IMAP_TIMEOUT_SECONDS", "20"))
-    search_criteria = os.getenv("QQ_IMAP_SEARCH_CRITERIA", "ALL")
+    return fetch_imap_emails(
+        ImapSmtpSettings(
+            provider="qq",
+            email_address=required_env("QQ_EMAIL_ADDRESS"),
+            credential=required_env("QQ_EMAIL_AUTH_CODE"),
+            imap_host=os.getenv("QQ_IMAP_HOST", "imap.qq.com"),
+            imap_port=int(os.getenv("QQ_IMAP_PORT", "993")),
+            smtp_host=os.getenv("QQ_SMTP_HOST", "smtp.qq.com"),
+            smtp_port=int(os.getenv("QQ_SMTP_PORT", "465")),
+            timeout=float(os.getenv("QQ_IMAP_TIMEOUT_SECONDS", "20")),
+            search_criteria=os.getenv("QQ_IMAP_SEARCH_CRITERIA", "ALL"),
+        ),
+        limit=limit,
+        known_message_ids=known_message_ids,
+    )
 
-    with imaplib.IMAP4_SSL(host, port, timeout=timeout) as client:
-        client.login(address, auth_code)
+
+def fetch_imap_emails(
+    settings: ImapSmtpSettings,
+    *,
+    limit: int = 5,
+    known_message_ids: set[str] | None = None,
+) -> list[ImportedMail]:
+    """从符合标准 IMAP 的邮箱读取最近邮件，不改变服务器已读状态。"""
+    with imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port, timeout=settings.timeout) as client:
+        client.login(settings.email_address, settings.credential)
         client.select("INBOX")
-        status, data = client.search(None, search_criteria)
+        status, data = client.search(None, settings.search_criteria)
         if status != "OK":
             return []
 
@@ -96,7 +128,7 @@ def fetch_unread_qq_emails(limit: int = 5, known_message_ids: set[str] | None = 
             imported.append(
                 ImportedMail(
                     payload=EmailCreate(
-                        customer_name=sender_name or sender_email or "QQ Mail User",
+                        customer_name=sender_name or sender_email or f"{settings.provider.upper()} Mail User",
                         customer_email=sender_email,
                         subject=decode_mime_text(message.get("Subject", "(no subject)")),
                         body=body,
@@ -123,19 +155,45 @@ def fetch_provider_message_id(client: imaplib.IMAP4_SSL, mail_id: bytes) -> str:
 
 def send_qq_email(*, to_address: str, subject: str, body: str) -> None:
     """通过 QQ SMTP 发送纯文本客服回复。"""
-    from_address = required_env("QQ_EMAIL_ADDRESS")
-    auth_code = required_env("QQ_EMAIL_AUTH_CODE")
-    host = os.getenv("QQ_SMTP_HOST", "smtp.qq.com")
-    port = int(os.getenv("QQ_SMTP_PORT", "465"))
+    send_smtp_email(
+        ImapSmtpSettings(
+            provider="qq",
+            email_address=required_env("QQ_EMAIL_ADDRESS"),
+            credential=required_env("QQ_EMAIL_AUTH_CODE"),
+            imap_host=os.getenv("QQ_IMAP_HOST", "imap.qq.com"),
+            imap_port=int(os.getenv("QQ_IMAP_PORT", "993")),
+            smtp_host=os.getenv("QQ_SMTP_HOST", "smtp.qq.com"),
+            smtp_port=int(os.getenv("QQ_SMTP_PORT", "465")),
+        ),
+        to_address=to_address,
+        subject=subject,
+        body=body,
+    )
+
+
+def send_smtp_email(settings: ImapSmtpSettings, *, to_address: str, subject: str, body: str) -> None:
+    """通过 SSL SMTP 发送纯文本邮件，适用于 QQ 和 Gmail。"""
+    from_address = settings.email_address
 
     message = MIMEText(body, "plain", "utf-8")
     message["From"] = from_address
     message["To"] = to_address
     message["Subject"] = subject
 
-    with smtplib.SMTP_SSL(host, port) as client:
-        client.login(from_address, auth_code)
+    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+        client.login(from_address, settings.credential)
         client.sendmail(from_address, [to_address], message.as_string())
+
+
+def test_imap_smtp_connection(settings: ImapSmtpSettings) -> None:
+    """验证收信与发信登录，不读取正文也不发送测试邮件。"""
+    with imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port, timeout=settings.timeout) as client:
+        client.login(settings.email_address, settings.credential)
+        status, _ = client.select("INBOX", readonly=True)
+        if status != "OK":
+            raise MailClientConfigError("IMAP inbox is not accessible")
+    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+        client.login(settings.email_address, settings.credential)
 
 
 def required_env(name: str) -> str:

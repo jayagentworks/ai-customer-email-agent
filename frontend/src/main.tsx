@@ -33,6 +33,7 @@ import {
   Trash2,
   UploadCloud,
   UserCheck,
+  X,
   XCircle,
 } from "lucide-react";
 import "./styles.css";
@@ -70,6 +71,42 @@ type ActiveView = "inbox" | "review" | "knowledge" | "runs" | "settings";
 type EmailStatus = "new" | "processed" | "human_review" | "ready_to_send" | "needs_revision" | "escalated" | "sent" | "irrelevant";
 type KnowledgeStatus = "processing" | "indexed" | "failed" | "needs_reindex";
 type KnowledgeInputMode = "upload" | "manual";
+type MailProvider = "qq" | "outlook" | "gmail";
+
+type MailSourceInfo = {
+  provider: MailProvider;
+  label: string;
+  active: boolean;
+  configured: boolean;
+  secret_configured: boolean;
+  email_address: string;
+  imap_host: string;
+  imap_port: number | null;
+  smtp_host: string;
+  smtp_port: number | null;
+  tenant_id: string;
+  client_id: string;
+  redirect_uri: string;
+};
+
+type MailSourceState = {
+  active_provider: MailProvider;
+  sources: MailSourceInfo[];
+};
+
+type MailSourceDraft = {
+  provider: MailProvider;
+  email_address: string;
+  credential: string;
+  imap_host: string;
+  imap_port: string;
+  smtp_host: string;
+  smtp_port: string;
+  tenant_id: string;
+  client_id: string;
+  client_secret: string;
+  redirect_uri: string;
+};
 
 type WorkflowStep = {
   name: string;
@@ -462,6 +499,11 @@ function App() {
   const [uploadingKnowledge, setUploadingKnowledge] = useState(false);
   const [uploadingKnowledgeRevisionId, setUploadingKnowledgeRevisionId] = useState("");
   const [cleaningLogs, setCleaningLogs] = useState(false);
+  const [mailSourceState, setMailSourceState] = useState<MailSourceState | null>(null);
+  const [mailSourceModalOpen, setMailSourceModalOpen] = useState(false);
+  const [mailSourceDraft, setMailSourceDraft] = useState<MailSourceDraft>(() => emptyMailSourceDraft("qq"));
+  const [savingMailSource, setSavingMailSource] = useState(false);
+  const [mailSourceError, setMailSourceError] = useState("");
   const [locale, setLocale] = useState<Locale>("zh");
   const [activeView, setActiveView] = useState<ActiveView>("inbox");
   const syncingRef = useRef(false);
@@ -560,6 +602,51 @@ function App() {
   async function loadOperationLogs() {
     const response = await apiFetch(`${API_URL}/operation-logs`);
     setOperationLogs((await response.json()) as OperationLog[]);
+  }
+
+  async function loadMailSourceState() {
+    const response = await apiFetch(`${API_URL}/mail/source`);
+    if (!response.ok) return;
+    setMailSourceState((await response.json()) as MailSourceState);
+  }
+
+  function openMailSourceModal(provider = mailSourceState?.active_provider || "qq") {
+    const source = mailSourceState?.sources.find((item) => item.provider === provider);
+    setMailSourceDraft(mailSourceDraftFromInfo(provider, source));
+    setMailSourceError("");
+    setMailSourceModalOpen(true);
+  }
+
+  function selectMailProvider(provider: MailProvider) {
+    const source = mailSourceState?.sources.find((item) => item.provider === provider);
+    setMailSourceDraft(mailSourceDraftFromInfo(provider, source));
+    setMailSourceError("");
+  }
+
+  async function saveMailSource(event: React.FormEvent) {
+    event.preventDefault();
+    setSavingMailSource(true);
+    setMailSourceError("");
+    try {
+      const response = await apiFetch(`${API_URL}/mail/source`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...mailSourceDraft,
+          imap_port: mailSourceDraft.imap_port ? Number(mailSourceDraft.imap_port) : null,
+          smtp_port: mailSourceDraft.smtp_port ? Number(mailSourceDraft.smtp_port) : null,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "连接测试失败，邮件源未切换");
+      setMailSourceState((result as { state: MailSourceState }).state);
+      setMailSourceModalOpen(false);
+      window.alert("连接测试通过，邮件源已切换。");
+    } catch (error) {
+      setMailSourceError(error instanceof Error ? error.message : "连接测试失败，邮件源未切换");
+    } finally {
+      setSavingMailSource(false);
+    }
   }
 
   async function cleanupRunLogs() {
@@ -761,13 +848,13 @@ function App() {
     }
   }
 
-  async function syncQQMail(options: { silent?: boolean } = {}) {
+  async function syncMail(options: { silent?: boolean } = {}) {
     // 手动/自动同步共用同一入口。syncingRef 用来避免上一次同步未结束时重复发起请求。
     if (syncingRef.current) return;
     syncingRef.current = true;
     if (!options.silent) setSyncing(true);
     try {
-      const response = await apiFetch(`${API_URL}/mail/qq/import?limit=5`, { method: "POST" });
+      const response = await apiFetch(`${API_URL}/mail/import?limit=5`, { method: "POST" });
       if (!response.ok) return;
       const result = (await response.json()) as { queued_count?: number; skipped_count?: number; emails?: EmailRecord[] };
       const imported = result.emails || [];
@@ -782,7 +869,7 @@ function App() {
   }
 
   function pollMailProcessing(round = 0, silent = false) {
-    // QQ 邮箱导入后，后端会在 BackgroundTasks 中异步处理邮件。
+    // 当前活动邮件源导入后，后端会在 BackgroundTasks 中异步处理邮件。
     // 前端短时间轮询几次，让用户能看到“处理中 -> 分类完成”的变化。
     if (round >= 20) return;
     window.setTimeout(async () => {
@@ -971,16 +1058,17 @@ function App() {
     // 页面初始化时一次性加载所有基础数据。
     if (!currentUser) return;
     loadEmails({ selectFirstIfEmpty: true });
+    loadMailSourceState();
     if (canAccessView(currentUser.role, "knowledge")) loadKnowledgeDocuments();
     if (canAccessView(currentUser.role, "runs")) loadOperationLogs();
   }, [currentUser?.id]);
 
   useEffect(() => {
-    // 自动同步 QQ 邮箱只在浏览器标签可见时运行，减少后台空转请求。
+    // 自动同步当前邮件源只在浏览器标签可见时运行，减少后台空转请求。
     if (!currentUser) return;
     const syncWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
-      syncQQMail({ silent: true });
+      syncMail({ silent: true });
     };
     const timer = window.setInterval(syncWhenVisible, 20_000);
     const initialTimer = window.setTimeout(syncWhenVisible, 2_000);
@@ -1086,9 +1174,9 @@ function App() {
                   selectedId={selected?.id}
                   locale={locale}
                   setSelectedId={setSelectedId}
-                  onRefresh={syncQQMail}
+                  onRefresh={syncMail}
                   refreshing={syncing}
-                  refreshTitle={t.refresh}
+                  refreshTitle={`${t.refresh}（${mailSourceLabel(mailSourceState?.active_provider)}）`}
                   primaryTitle={locale === "zh" ? "客服邮件" : "Support emails"}
                   primaryHint={locale === "zh" ? "需要进入客服处理流程的邮件。" : "Emails that should enter the support workflow."}
                   secondaryTitle={locale === "zh" ? "非客服邮件复核" : "Non-support review"}
@@ -1161,6 +1249,16 @@ function App() {
                   <Languages size={16} />{t.languageLabel}
                 </button>
               </div>
+              <div className="settingRow mailSourceRow">
+                <div className="mailSourceSummary">
+                  <span>邮件源</span>
+                  <strong>{mailSourceLabel(mailSourceState?.active_provider)}</strong>
+                  <small>切换前会验证收信与发信权限，失败时继续使用当前邮件源。</small>
+                </div>
+                <button className="mailSourceButton" type="button" onClick={() => openMailSourceModal()} title="配置或切换邮件源">
+                  <PlusCircle size={16} />配置邮件源
+                </button>
+              </div>
             </section>
             <section className="opsPanel">
               <div><span>{t.workspaceLabel}</span><strong>{t.workspaceValue}</strong></div>
@@ -1169,8 +1267,113 @@ function App() {
             </section>
           </div>
         )}
+
+        {mailSourceModalOpen && (
+          <MailSourceModal
+            draft={mailSourceDraft}
+            state={mailSourceState}
+            saving={savingMailSource}
+            error={mailSourceError}
+            onSelectProvider={selectMailProvider}
+            onChange={(field, value) => setMailSourceDraft((current) => ({ ...current, [field]: value }))}
+            onClose={() => !savingMailSource && setMailSourceModalOpen(false)}
+            onSubmit={saveMailSource}
+          />
+        )}
       </section>
     </main>
+  );
+}
+
+function mailSourceLabel(provider?: MailProvider) {
+  return provider === "outlook" ? "Outlook" : provider === "gmail" ? "Gmail" : "QQ 邮箱";
+}
+
+function emptyMailSourceDraft(provider: MailProvider): MailSourceDraft {
+  const imapDefaults = provider === "gmail"
+    ? { imap_host: "imap.gmail.com", imap_port: "993", smtp_host: "smtp.gmail.com", smtp_port: "465" }
+    : { imap_host: "imap.qq.com", imap_port: "993", smtp_host: "smtp.qq.com", smtp_port: "465" };
+  return {
+    provider,
+    email_address: "",
+    credential: "",
+    tenant_id: "",
+    client_id: "",
+    client_secret: "",
+    redirect_uri: "",
+    ...(provider === "outlook" ? { imap_host: "", imap_port: "", smtp_host: "", smtp_port: "" } : imapDefaults),
+  };
+}
+
+function mailSourceDraftFromInfo(provider: MailProvider, source?: MailSourceInfo): MailSourceDraft {
+  const defaults = emptyMailSourceDraft(provider);
+  if (!source) return defaults;
+  return {
+    ...defaults,
+    email_address: source.email_address || "",
+    imap_host: source.imap_host || defaults.imap_host,
+    imap_port: source.imap_port ? String(source.imap_port) : defaults.imap_port,
+    smtp_host: source.smtp_host || defaults.smtp_host,
+    smtp_port: source.smtp_port ? String(source.smtp_port) : defaults.smtp_port,
+    tenant_id: source.tenant_id || "",
+    client_id: source.client_id || "",
+    redirect_uri: source.redirect_uri || "",
+  };
+}
+
+function MailSourceModal({ draft, state, saving, error, onSelectProvider, onChange, onClose, onSubmit }: {
+  draft: MailSourceDraft;
+  state: MailSourceState | null;
+  saving: boolean;
+  error: string;
+  onSelectProvider: (provider: MailProvider) => void;
+  onChange: (field: keyof MailSourceDraft, value: string) => void;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  const source = state?.sources.find((item) => item.provider === draft.provider);
+  const secretHint = source?.secret_configured ? "留空则沿用已保存的认证信息" : "请输入认证信息";
+  return (
+    <div className="modalBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="mailSourceModal" role="dialog" aria-modal="true" aria-labelledby="mail-source-title">
+        <header className="mailSourceModalHeader">
+          <div><h2 id="mail-source-title">配置邮件源</h2><p>系统会先验证收信与发信权限，通过后才切换。</p></div>
+          <button type="button" className="iconButton" onClick={onClose} title="关闭" aria-label="关闭"><X size={18} /></button>
+        </header>
+        <div className="providerTabs" role="tablist" aria-label="邮件服务商">
+          {(["qq", "outlook", "gmail"] as MailProvider[]).map((provider) => (
+            <button key={provider} type="button" role="tab" aria-selected={draft.provider === provider} className={`providerTab ${draft.provider === provider ? "active" : ""}`} onClick={() => onSelectProvider(provider)}>
+              {mailSourceLabel(provider)}
+              {state?.active_provider === provider && <span>当前</span>}
+            </button>
+          ))}
+        </div>
+        <form className="mailSourceForm" onSubmit={onSubmit}>
+          <label><span>邮箱地址</span><input type="email" required value={draft.email_address} onChange={(event) => onChange("email_address", event.target.value)} placeholder={draft.provider === "outlook" ? "user@company.com" : "name@example.com"} /></label>
+          {draft.provider === "outlook" ? (
+            <div className="mailSourceFieldGrid">
+              <label><span>Tenant ID</span><input required value={draft.tenant_id} onChange={(event) => onChange("tenant_id", event.target.value)} /></label>
+              <label><span>Client ID</span><input required value={draft.client_id} onChange={(event) => onChange("client_id", event.target.value)} /></label>
+              <label className="wideField"><span>Client Secret</span><input type="password" value={draft.client_secret} onChange={(event) => onChange("client_secret", event.target.value)} placeholder={secretHint} required={!source?.secret_configured} /></label>
+              <label className="wideField"><span>Redirect URI（可选）</span><input value={draft.redirect_uri} onChange={(event) => onChange("redirect_uri", event.target.value)} placeholder="应用权限模式不依赖此字段" /></label>
+            </div>
+          ) : (
+            <div className="mailSourceFieldGrid">
+              <label className="wideField"><span>{draft.provider === "qq" ? "QQ 邮箱授权码" : "Gmail 应用专用密码"}</span><input type="password" value={draft.credential} onChange={(event) => onChange("credential", event.target.value)} placeholder={secretHint} required={!source?.secret_configured} /></label>
+              <label><span>IMAP 主机</span><input required value={draft.imap_host} onChange={(event) => onChange("imap_host", event.target.value)} /></label>
+              <label><span>IMAP 端口</span><input required type="number" value={draft.imap_port} onChange={(event) => onChange("imap_port", event.target.value)} /></label>
+              <label><span>SMTP 主机</span><input required value={draft.smtp_host} onChange={(event) => onChange("smtp_host", event.target.value)} /></label>
+              <label><span>SMTP 端口</span><input required type="number" value={draft.smtp_port} onChange={(event) => onChange("smtp_port", event.target.value)} /></label>
+            </div>
+          )}
+          {error && <div className="mailSourceError" role="alert">{error}</div>}
+          <footer className="mailSourceActions">
+            <button type="button" onClick={onClose} disabled={saving}>取消</button>
+            <button type="submit" className="primary" disabled={saving}>{saving ? "正在验证连接..." : "测试并切换"}</button>
+          </footer>
+        </form>
+      </section>
+    </div>
   );
 }
 

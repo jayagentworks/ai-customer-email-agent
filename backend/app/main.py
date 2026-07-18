@@ -42,7 +42,15 @@ from app.knowledge import (
     update_knowledge_document,
     update_knowledge_document_from_upload,
 )
-from app.mail_client import MailClientConfigError, fetch_unread_qq_emails, send_qq_email
+from app.mail_client import MailClientConfigError
+from app.mail_sources import (
+    PROVIDER_LABELS,
+    configure_and_activate,
+    fetch_active_emails,
+    get_active_provider,
+    get_mail_source_state,
+    send_active_email,
+)
 from app.models import (
     EmailCreate,
     EmailRecord,
@@ -54,6 +62,9 @@ from app.models import (
     KnowledgeDocumentVersion,
     KnowledgeHit,
     KnowledgeSearchRequest,
+    MailSourceConfigInput,
+    MailSourceState,
+    MailSourceSwitchResult,
     OperationLog,
     ReviewAction,
 )
@@ -333,29 +344,58 @@ def regenerate_email_draft(email_id: str, current_user: CurrentUser) -> EmailRec
     return store.get(email_id) or saved
 
 
-@app.post("/mail/qq/import")
-def import_qq_mail(background_tasks: BackgroundTasks, current_user: CurrentUser, limit: int = Query(default=10, ge=1, le=50)) -> dict:
-    """同步 QQ 邮箱并把新邮件加入后台处理队列。
+@app.get("/mail/source", response_model=MailSourceState)
+def get_mail_source(_: CurrentUser) -> MailSourceState:
+    """返回当前邮件源及各服务商的非敏感配置状态。"""
+    return get_mail_source_state()
+
+
+@app.put("/mail/source", response_model=MailSourceSwitchResult)
+def switch_mail_source(
+    payload: MailSourceConfigInput,
+    current_user: UserProfile = Depends(require_roles(["admin"])),
+) -> MailSourceSwitchResult:
+    """测试管理员提交的连接；仅测试成功后保存并切换活动邮件源。"""
+    previous = get_active_provider()
+    try:
+        state = configure_and_activate(payload)
+    except MailClientConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record_operation_log(
+        scope="mail",
+        action="switch_mail_source",
+        title=f"切换到 {PROVIDER_LABELS[payload.provider]}",
+        summary=f"邮件源已从 {PROVIDER_LABELS[previous]} 切换到 {PROVIDER_LABELS[payload.provider]}。",
+        detail={"operator": current_user.username, "previous_provider": previous, "provider": payload.provider},
+    )
+    return MailSourceSwitchResult(message="连接测试通过，邮件源已切换。", state=state)
+
+
+@app.post("/mail/import")
+@app.post("/mail/qq/import", include_in_schema=False)
+def import_mail(background_tasks: BackgroundTasks, current_user: CurrentUser, limit: int = Query(default=10, ge=1, le=50)) -> dict:
+    """从当前活动邮件源同步新邮件并加入后台处理队列。
 
     接口返回时不一定已经完成 Agent 分析，因为每封新邮件会通过 BackgroundTasks
     异步调用 ``process_imported_email``。这样前端可以先看到“已同步，处理中”，
     再轮询刷新最终分类结果。
     """
     try:
-        known_message_ids = store.list_provider_message_ids("qq", limit=300)
-        imported = fetch_unread_qq_emails(limit=limit, known_message_ids=known_message_ids)
+        provider = get_active_provider()
+        known_message_ids = store.list_provider_message_ids(provider, limit=300)
+        provider, imported = fetch_active_emails(limit=limit, known_message_ids=known_message_ids)
     except MailClientConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     queued_emails: list[EmailRecord] = []
     skipped_count = 0
     for item in imported:
-        if store.exists_provider_message("qq", item.provider_message_id):
+        if store.exists_provider_message(provider, item.provider_message_id):
             skipped_count += 1
             continue
         email = EmailRecord(
             **item.payload.model_dump(),
-            provider="qq",
+            provider=provider,
             provider_message_id=item.provider_message_id,
         )
         email.status = "new"
@@ -366,16 +406,16 @@ def import_qq_mail(background_tasks: BackgroundTasks, current_user: CurrentUser,
 
     record_operation_log(
         scope="mail",
-        action="import_qq_mail",
-        title="QQ 邮箱同步",
-        summary=f"QQ 邮箱同步完成，新增 {len(queued_emails)} 封邮件进入后台 Agent 处理。",
+        action="import_mail",
+        title=f"{PROVIDER_LABELS[provider]}同步",
+        summary=f"{PROVIDER_LABELS[provider]}同步完成，新增 {len(queued_emails)} 封邮件进入后台 Agent 处理。",
         detail={
             "operator": current_user.username,
             "operator_role": current_user.role,
             "requested_limit": limit,
             "queued_count": len(queued_emails),
             "skipped_count": skipped_count,
-            "provider": "qq",
+            "provider": provider,
         },
     )
 
@@ -387,7 +427,7 @@ def import_qq_mail(background_tasks: BackgroundTasks, current_user: CurrentUser,
 
 
 def process_imported_email(email_id: str) -> None:
-    """后台处理从 QQ 邮箱导入的邮件。"""
+    """后台处理从当前邮件源导入的邮件。"""
     email = store.get(email_id)
     if not email:
         return
@@ -446,7 +486,7 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
 
     try:
         email.draft_reply = sanitize_customer_reply(email.draft_reply)
-        send_qq_email(
+        provider = send_active_email(
             to_address=email.customer_email,
             subject=f"Re: {email.subject}",
             body=email.draft_reply,
@@ -455,13 +495,14 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     email.status = "sent"
-    email.review_note = "已通过 QQ SMTP 发送回复。" if email.detected_language == "zh" else "Reply sent via QQ SMTP."
+    label = PROVIDER_LABELS[provider]
+    email.review_note = f"已通过{label}发送回复。" if email.detected_language == "zh" else f"Reply sent via {label}."
     saved = store.save(email)
     record_operation_log(
         scope="mail",
         action="send_reply",
         title=email.subject,
-        summary=f"邮件「{email.subject}」已通过 QQ SMTP 发送回复。",
+        summary=f"邮件「{email.subject}」已通过{label}发送回复。",
         detail={
             "operator": current_user.username,
             "operator_role": current_user.role,
@@ -469,6 +510,7 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
             "to": email.customer_email,
             "subject": f"Re: {email.subject}",
             "status": saved.status,
+            "provider": provider,
         },
     )
     return saved
