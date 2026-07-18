@@ -255,7 +255,7 @@ const copy = {
     approve: "Approve",
     revise: "Revise",
     escalate: "Escalate",
-    undoEscalate: "Undo escalation",
+    undoEscalate: "Cancel escalation",
     regenerateReply: "Regenerate",
     regeneratingReply: "Generating",
     sendReply: "Send Reply",
@@ -317,7 +317,7 @@ const copy = {
     approve: "通过",
     revise: "修改",
     escalate: "升级处理",
-    undoEscalate: "撤销升级",
+    undoEscalate: "取消升级",
     regenerateReply: "换一版回复",
     regeneratingReply: "生成中",
     sendReply: "发送回复",
@@ -470,12 +470,13 @@ function App() {
   const t = copy[locale];
   // 收件箱中把客服邮件和非客服邮件拆成两个可折叠列表：
   // 客服邮件用于处理和发送；非客服邮件只用于快速复核，避免通知类邮件干扰主流程。
-  const inboxEmails = emails.filter((email) => email.status !== "irrelevant");
+  const inboxEmails = emails.filter((email) => email.status !== "irrelevant" && !(currentUser?.role === "agent" && hasActiveEscalation(email)));
   const irrelevantEmails = emails.filter((email) => email.status === "irrelevant");
   const visibleInboxEmails = useMemo(() => [...inboxEmails, ...irrelevantEmails], [inboxEmails, irrelevantEmails]);
   const selected = useMemo(() => visibleInboxEmails.find((email) => email.id === selectedId) ?? inboxEmails[0] ?? irrelevantEmails[0] ?? emails[0], [emails, inboxEmails, irrelevantEmails, visibleInboxEmails, selectedId]);
   const reviewEmails = emails.filter((email) => {
     if (["irrelevant", "sent", "processed"].includes(email.status)) return false;
+    if (currentUser?.role === "agent" && hasActiveEscalation(email)) return false;
     if (currentUser?.role === "manager") return isEscalationEmail(email);
     if (email.status === "ready_to_send") return hasManualApproval(email) || hasEscalationHistory(email);
     return ["human_review", "needs_revision", "escalated", "ready_to_send"].includes(email.status) || email.priority === "high";
@@ -896,8 +897,20 @@ function App() {
     // 所有人工审核动作都走同一个接口，后端负责更新状态和记录审核历史。
     const target = activeView === "review" ? selectedReview : selected;
     if (!target) return;
+    if (action === "escalate" && currentUser?.role === "agent") {
+      const confirmed = window.confirm(
+        locale === "zh"
+          ? "确认升级处理这封邮件吗？\n\n确认后邮件将移交给客服主管和系统管理员，并立即从你的收件箱及审核队列中移除。你无法自行取消升级。"
+          : "Escalate this email?\n\nIt will be transferred to managers and administrators and removed from your inbox and review queue. You cannot cancel the escalation yourself."
+      );
+      if (!confirmed) return;
+    }
+    if (action === "undo_escalate" && currentUser?.role === "agent") {
+      window.alert(locale === "zh" ? "客服人员不能取消升级处理，请联系主管或系统管理员。" : "Agents cannot cancel escalations. Contact a manager or administrator.");
+      return;
+    }
     if (action === "approve" && hasActiveEscalation(target)) {
-      window.alert("该邮件正在升级处理中，请先撤销升级，或由客服主管处理升级工单后再通过。");
+      window.alert("该邮件正在升级处理中，请先取消升级，或由客服主管处理升级工单后再通过。");
       return;
     }
     if (action === "approve" && hasEscalationHistory(target)) {
@@ -909,7 +922,7 @@ function App() {
       if (!confirmed) return;
     }
     if (action === "revise" && hasActiveEscalation(target)) {
-      window.alert("该邮件正在升级处理中，请先撤销升级，或由客服主管处理升级工单后再修改。");
+      window.alert("该邮件正在升级处理中，请先取消升级，或由客服主管处理升级工单后再修改。");
       return;
     }
     const response = await apiFetch(`${API_URL}/emails/${target.id}/review`, {
@@ -927,9 +940,14 @@ function App() {
       return;
     }
     const updated = (await response.json()) as EmailRecord;
-    setEmails((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+    if (action === "escalate" && currentUser?.role === "agent") {
+      setEmails((items) => items.filter((item) => item.id !== updated.id));
+      setSelectedId("");
+    } else {
+      setEmails((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setSelectedId(updated.id);
+    }
     await loadOperationLogs();
-    setSelectedId(updated.id);
   }
 
   async function updateEscalation(emailId: string, action: "assign" | "resolve" | "return_to_review", note = "") {
@@ -1211,8 +1229,8 @@ function Topbar({ title, subtitle, t, emails, processedCount }: { title: string;
 
 function hasEscalationHistory(email: EmailRecord) {
   // 仍处于有效升级链路的邮件需要更高权限发送。
-  // 如果客服人员误点升级后又撤销，最后一次升级相关动作会是 undo_escalate，
-  // 此时恢复为普通审核邮件，agent 审核通过后可以发送。
+  // manager/admin 取消升级后，最后一次升级相关动作会是 undo_escalate，
+  // 此时恢复为普通审核邮件，Agent 审核通过后可以发送。
   // 前端用于禁用 agent 发送入口；后端也有同样校验，避免绕过页面限制。
   const escalationActions = (email.review_actions || []).filter((action) => action.action === "escalate" || action.action === "undo_escalate");
   if (escalationActions.length > 0) {
@@ -1822,10 +1840,12 @@ function EmailDetail({ selected, currentUser, locale, t, review, updateEscalatio
         <div className="replyHeader">
           <h3>{t.draftReply}</h3>
           {!isIrrelevant && <div className="reviewActions">
-            <button onClick={() => review("approve", reviewNote, revisedReply)} title={activeEscalation ? "请先撤销升级，或由客服主管处理升级工单后再通过" : ""}><ShieldCheck size={16} />{t.approve}</button>
-            <button onClick={() => review(activeEscalation ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
-              <UserCheck size={16} />{activeEscalation ? t.undoEscalate : t.escalate}
-            </button>
+            <button onClick={() => review("approve", reviewNote, revisedReply)} title={activeEscalation ? "请先取消升级，或由客服主管处理升级工单后再通过" : ""}><ShieldCheck size={16} />{t.approve}</button>
+            {(!activeEscalation || canHandleEscalation) && (
+              <button onClick={() => review(activeEscalation ? "undo_escalate" : "escalate", reviewNote, revisedReply)}>
+                <UserCheck size={16} />{activeEscalation ? t.undoEscalate : t.escalate}
+              </button>
+            )}
             <button onClick={() => regenerateReply(selected.id)} disabled={regeneratingId === selected.id}>
               <RefreshCcw size={16} />{regeneratingId === selected.id ? t.regeneratingReply : t.regenerateReply}
             </button>
@@ -1920,7 +1940,7 @@ const reviewActionLabels: Record<Locale, Record<ReviewActionRecord["action"], st
     approve: "审核通过",
     revise: "要求修改",
     escalate: "升级处理",
-    undo_escalate: "撤销升级",
+    undo_escalate: "取消升级",
   },
 };
 

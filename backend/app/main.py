@@ -114,16 +114,21 @@ def get_me(current_user: CurrentUser) -> UserProfile:
 
 
 @app.get("/emails", response_model=list[EmailRecord])
-def list_emails(_: CurrentUser) -> list[EmailRecord]:
-    """返回系统中的邮件列表。"""
-    return store.list()
+def list_emails(current_user: CurrentUser) -> list[EmailRecord]:
+    """返回当前角色有权查看的邮件列表。
+
+    Agent 发起升级后即完成权限移交，升级中的邮件只对 manager/admin
+    可见；主管取消升级后，邮件会重新回到 Agent 的列表中。
+    """
+    return [email for email in store.list() if can_user_access_email(current_user.role, email)]
 
 
 @app.get("/emails/{email_id}", response_model=EmailRecord)
-def get_email(email_id: str, _: CurrentUser) -> EmailRecord:
+def get_email(email_id: str, current_user: CurrentUser) -> EmailRecord:
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
+    ensure_user_can_access_email(current_user.role, email)
     return email
 
 
@@ -156,14 +161,17 @@ def create_and_process_email(payload: EmailCreate, current_user: CurrentUser) ->
 def review_email(email_id: str, payload: ReviewAction, current_user: CurrentUser) -> EmailRecord:
     """人工审核邮件草稿。
 
-    审核动作包括通过、要求修改、升级处理和撤销升级。每次审核都会写入
-    review history，方便前端展示人工操作记录。
+    审核动作包括通过、要求修改、升级处理和取消升级。每次审核都会写入
+    review history，方便前端展示人工操作记录。取消升级仅允许 manager/admin。
     """
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
+    ensure_user_can_access_email(current_user.role, email)
+    if payload.action == "undo_escalate" and current_user.role not in {"admin", "manager"}:
+        raise HTTPException(status_code=403, detail="只有客服主管或系统管理员可以取消升级处理")
     if payload.action in {"approve", "revise"} and has_active_escalation(email):
-        raise HTTPException(status_code=400, detail="请先撤销升级，或由客服主管处理升级工单后再审核")
+        raise HTTPException(status_code=400, detail="请先取消升级，或由客服主管处理升级工单后再审核")
 
     if payload.action == "approve":
         email.status = "ready_to_send"
@@ -241,6 +249,21 @@ def has_active_escalation(email: EmailRecord) -> bool:
     return email.escalation_ticket is not None and email.escalation_ticket.status in {"open", "assigned"}
 
 
+def can_user_access_email(role: str, email: EmailRecord) -> bool:
+    """判断角色是否可以访问邮件。
+
+    升级代表 Agent 将处理权正式移交给更高权限角色，因此 Agent 在升级
+    有效期间不能通过列表或详情接口继续查看、修改该邮件。
+    """
+    return role != "agent" or not has_active_escalation(email)
+
+
+def ensure_user_can_access_email(role: str, email: EmailRecord) -> None:
+    """阻止 Agent 绕过前端直接访问已经移交的升级邮件。"""
+    if not can_user_access_email(role, email):
+        raise HTTPException(status_code=404, detail="Email not found")
+
+
 @app.post("/emails/{email_id}/escalation", response_model=EmailRecord)
 def update_email_escalation(email_id: str, payload: EscalationUpdate, current_user: CurrentUser) -> EmailRecord:
     """客服主管处理升级工单。
@@ -289,6 +312,7 @@ def regenerate_email_draft(email_id: str, current_user: CurrentUser) -> EmailRec
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
+    ensure_user_can_access_email(current_user.role, email)
     if email.status in {"new", "irrelevant"} or not email.category or email.category == "other":
         raise HTTPException(status_code=400, detail="Email must be processed as a customer support request before regenerating a draft")
 
@@ -412,6 +436,7 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
     email = store.get(email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
+    ensure_user_can_access_email(current_user.role, email)
     if not email.draft_reply:
         raise HTTPException(status_code=400, detail="Draft reply is empty")
     if email.status != "ready_to_send":
@@ -452,10 +477,10 @@ def send_email_reply(email_id: str, current_user: CurrentUser) -> EmailRecord:
 def has_escalation_history(email: EmailRecord) -> bool:
     """判断邮件是否仍需要按升级邮件限制发送。
 
-    如果客服人员误点升级后又撤销，最后一次升级相关动作会是
-    ``undo_escalate``，这类邮件应该恢复为普通审核邮件，允许 agent
-    在审核通过后发送。只有最后一次升级相关动作仍是 ``escalate``，
-    或存在未被撤销的升级工单时，才限制 agent 发送。
+    manager/admin 取消升级后，最后一次升级相关动作会是
+    ``undo_escalate``，邮件恢复为普通审核邮件，允许 Agent 继续处理。
+    只有最后一次相关动作仍是 ``escalate``，或存在有效升级工单时，
+    才继续限制 Agent 发送。
     """
     escalation_actions = [action for action in email.review_actions if action.action in {"escalate", "undo_escalate"}]
     if escalation_actions:
