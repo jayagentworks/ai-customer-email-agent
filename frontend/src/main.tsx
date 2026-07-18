@@ -1669,7 +1669,8 @@ function EmailQueue({
   secondaryHint?: string;
   secondaryEmails?: EmailRecord[];
 }) {
-  const [openQueueSection, setOpenQueueSection] = useState<"primary" | "secondary">("primary");
+  // 两个邮件分组使用独立展开状态，允许同时展开或同时收起。
+  const [openQueueSections, setOpenQueueSections] = useState({ primary: true, secondary: false });
   const renderEmailItem = (email: EmailRecord) => (
     <button key={email.id} className={`emailItem ${selectedId === email.id ? "active" : ""}`} onClick={() => setSelectedId(email.id)}>
       <span className={`priority ${email.priority}`}>{priorityLabels[locale][email.priority]}</span>
@@ -1680,7 +1681,7 @@ function EmailQueue({
   );
 
   return (
-    <div className={`queuePane ${openQueueSection === "secondary" ? "secondaryOpen" : "primaryOpen"}`}>
+    <div className="queuePane">
       <div className="queueHeader">
         <div><h3>{title}</h3><span>{hint}</span></div>
         {onRefresh && (
@@ -1695,12 +1696,17 @@ function EmailQueue({
           </button>
         )}
       </div>
-      <section className={`queueSection ${openQueueSection === "primary" ? "open" : ""}`}>
-        <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "primary" ? "secondary" : "primary")}>
+      <section className={`queueSection ${openQueueSections.primary ? "open" : ""}`}>
+        <button
+          className="queueSectionHeader"
+          type="button"
+          aria-expanded={openQueueSections.primary}
+          onClick={() => setOpenQueueSections((current) => ({ ...current, primary: !current.primary }))}
+        >
           <div><strong>{primaryTitle || title}</strong>{primaryHint && <span>{primaryHint}</span>}</div>
           <small>{emails.length}</small>
         </button>
-        {openQueueSection === "primary" && (
+        {openQueueSections.primary && (
           <div className="emailList queueSectionList">
             {emails.map(renderEmailItem)}
             {emails.length === 0 && <div className="queueEmpty">{locale === "zh" ? "暂无客服邮件" : "No support emails"}</div>}
@@ -1708,12 +1714,17 @@ function EmailQueue({
         )}
       </section>
       {secondaryTitle && (
-        <section className={`queueSection secondaryQueueSection ${openQueueSection === "secondary" ? "open" : ""}`}>
-          <button className="queueSectionHeader" type="button" onClick={() => setOpenQueueSection(openQueueSection === "secondary" ? "primary" : "secondary")}>
+        <section className={`queueSection secondaryQueueSection ${openQueueSections.secondary ? "open" : ""}`}>
+          <button
+            className="queueSectionHeader"
+            type="button"
+            aria-expanded={openQueueSections.secondary}
+            onClick={() => setOpenQueueSections((current) => ({ ...current, secondary: !current.secondary }))}
+          >
             <div><strong>{secondaryTitle}</strong>{secondaryHint && <span>{secondaryHint}</span>}</div>
             <small>{secondaryEmails.length}</small>
           </button>
-          {openQueueSection === "secondary" && (
+          {openQueueSections.secondary && (
             <div className="emailList queueSectionList secondaryEmailList">
               {secondaryEmails.map(renderEmailItem)}
               {secondaryEmails.length === 0 && <div className="queueEmpty">{locale === "zh" ? "暂无非客服邮件" : "No non-support emails"}</div>}
