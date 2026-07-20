@@ -207,6 +207,7 @@ class EscalationUpdate(BaseModel):
 
 
 MailProvider = Literal["qq", "outlook", "gmail"]
+MailAuthMode = Literal["imap_smtp", "api_oauth"]
 
 
 class MailSourceConfigInput(BaseModel):
@@ -217,6 +218,7 @@ class MailSourceConfigInput(BaseModel):
     """
 
     provider: MailProvider
+    auth_mode: MailAuthMode = "imap_smtp"
     email_address: str = ""
     credential: str = ""
     imap_host: str = ""
@@ -231,10 +233,13 @@ class MailSourceConfigInput(BaseModel):
 
 class MailSourceInfo(BaseModel):
     provider: MailProvider
+    auth_mode: MailAuthMode = "imap_smtp"
     label: str
     active: bool = False
     configured: bool = False
     secret_configured: bool = False
+    imap_secret_configured: bool = False
+    oauth_secret_configured: bool = False
     email_address: str = ""
     imap_host: str = ""
     imap_port: int | None = None
@@ -243,6 +248,10 @@ class MailSourceInfo(BaseModel):
     tenant_id: str = ""
     client_id: str = ""
     redirect_uri: str = ""
+
+
+class MailOAuthStartResult(BaseModel):
+    authorization_url: str
 
 
 class MailSourceState(BaseModel):

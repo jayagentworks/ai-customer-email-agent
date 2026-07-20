@@ -120,25 +120,40 @@ def fetch_imap_emails(
             if not raw_message:
                 continue
 
-            message = message_from_bytes(raw_message)
-            sender_name, sender_email = parseaddr(decode_mime_text(message.get("From", "")))
-            body = extract_plain_text(message)
-            if len(body.strip()) < 10:
-                body = "(empty email body)"
             imported.append(
-                ImportedMail(
-                    payload=EmailCreate(
-                        customer_name=sender_name or sender_email or f"{settings.provider.upper()} Mail User",
-                        customer_email=sender_email,
-                        subject=decode_mime_text(message.get("Subject", "(no subject)")),
-                        body=body,
-                        attachments=extract_attachments(message),
-                    ),
-                    provider_message_id=provider_message_id or message.get("Message-ID", mail_id.decode("utf-8", errors="ignore")),
+                parse_raw_email(
+                    raw_message,
+                    provider=settings.provider,
+                    provider_message_id=provider_message_id or mail_id.decode("utf-8", errors="ignore"),
                 )
             )
 
         return imported
+
+
+def parse_raw_email(raw_message: bytes, *, provider: str, provider_message_id: str) -> ImportedMail:
+    """把 RFC 822 原始邮件转换为项目统一结构。
+
+    IMAP 和 Gmail API 都能获得完整的 RFC 822 邮件。统一走这里可以复用已经过
+    多轮修复的 MIME、字符集、HTML 正文和附件解析逻辑，避免不同接入方式产生
+    两套解码行为。
+    """
+    message = message_from_bytes(raw_message)
+    sender_name, sender_email = parseaddr(decode_mime_text(message.get("From", "")))
+    body = extract_plain_text(message)
+    if len(body.strip()) < 10:
+        body = "(empty email body)"
+    stable_id = provider_message_id or message.get("Message-ID", "")
+    return ImportedMail(
+        payload=EmailCreate(
+            customer_name=sender_name or sender_email or f"{provider.upper()} Mail User",
+            customer_email=sender_email,
+            subject=decode_mime_text(message.get("Subject", "(no subject)")),
+            body=body,
+            attachments=extract_attachments(message),
+        ),
+        provider_message_id=stable_id,
+    )
 
 
 def fetch_provider_message_id(client: imaplib.IMAP4_SSL, mail_id: bytes) -> str:
@@ -180,7 +195,15 @@ def send_smtp_email(settings: ImapSmtpSettings, *, to_address: str, subject: str
     message["To"] = to_address
     message["Subject"] = subject
 
-    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+    if settings.smtp_port == 465:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+            client.login(from_address, settings.credential)
+            client.sendmail(from_address, [to_address], message.as_string())
+        return
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+        client.ehlo()
+        client.starttls()
+        client.ehlo()
         client.login(from_address, settings.credential)
         client.sendmail(from_address, [to_address], message.as_string())
 
@@ -192,8 +215,15 @@ def test_imap_smtp_connection(settings: ImapSmtpSettings) -> None:
         status, _ = client.select("INBOX", readonly=True)
         if status != "OK":
             raise MailClientConfigError("IMAP inbox is not accessible")
-    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
-        client.login(settings.email_address, settings.credential)
+    if settings.smtp_port == 465:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+            client.login(settings.email_address, settings.credential)
+    else:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.timeout) as client:
+            client.ehlo()
+            client.starttls()
+            client.ehlo()
+            client.login(settings.email_address, settings.credential)
 
 
 def required_env(name: str) -> str:

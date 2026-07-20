@@ -345,6 +345,57 @@ button {
   gap: 14px;
 }
 
+.authModeFieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.authModeFieldset legend {
+  margin-bottom: 7px;
+  color: #344653;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.authModeSelector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border-radius: 7px;
+  background: #eef2f6;
+}
+
+.authModeSelector button {
+  min-height: 38px;
+  border: 0;
+  color: #526573;
+  background: transparent;
+  font-weight: 700;
+}
+
+.authModeSelector button.active {
+  color: #174a7c;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.authModeSelector button:disabled {
+  cursor: not-allowed;
+  color: #9aa7b1;
+  opacity: 0.72;
+}
+
+.authModeFieldset small {
+  display: block;
+  margin-top: 7px;
+  color: #687986;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .mailSourceFieldGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1497,6 +1548,26 @@ h3 {
 
 .queueHeader h3 {
   margin-bottom: 3px;
+}
+
+.queueHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.mailScopeSelect {
+  width: 142px;
+  height: 36px;
+  padding: 0 30px 0 10px;
+  border: 1px solid #d4dde5;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334a5d;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .emailList {

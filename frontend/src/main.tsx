@@ -72,13 +72,17 @@ type EmailStatus = "new" | "processed" | "human_review" | "ready_to_send" | "nee
 type KnowledgeStatus = "processing" | "indexed" | "failed" | "needs_reindex";
 type KnowledgeInputMode = "upload" | "manual";
 type MailProvider = "qq" | "outlook" | "gmail";
+type MailAuthMode = "imap_smtp" | "api_oauth";
 
 type MailSourceInfo = {
   provider: MailProvider;
+  auth_mode: MailAuthMode;
   label: string;
   active: boolean;
   configured: boolean;
   secret_configured: boolean;
+  imap_secret_configured: boolean;
+  oauth_secret_configured: boolean;
   email_address: string;
   imap_host: string;
   imap_port: number | null;
@@ -96,6 +100,7 @@ type MailSourceState = {
 
 type MailSourceDraft = {
   provider: MailProvider;
+  auth_mode: MailAuthMode;
   email_address: string;
   credential: string;
   imap_host: string;
@@ -504,6 +509,7 @@ function App() {
   const [mailSourceDraft, setMailSourceDraft] = useState<MailSourceDraft>(() => emptyMailSourceDraft("qq"));
   const [savingMailSource, setSavingMailSource] = useState(false);
   const [mailSourceError, setMailSourceError] = useState("");
+  const [mailListScope, setMailListScope] = useState<"active" | "all">("active");
   const [locale, setLocale] = useState<Locale>("zh");
   const [activeView, setActiveView] = useState<ActiveView>("inbox");
   const syncingRef = useRef(false);
@@ -534,6 +540,19 @@ function App() {
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("mail_oauth");
+    if (!result) return;
+    const provider = mailSourceLabel((params.get("provider") || undefined) as MailProvider | undefined);
+    if (result === "success") {
+      window.alert(`${provider} API OAuth 授权成功，邮件源已切换。`);
+    } else {
+      window.alert(`${provider} API OAuth 授权失败：${params.get("message") || "授权被取消"}`);
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, []);
 
   useEffect(() => {
     if (!authToken) {
@@ -583,9 +602,10 @@ function App() {
     setSelectedId("");
   }
 
-  async function loadEmails(options: { selectFirstIfEmpty?: boolean } = {}) {
+  async function loadEmails(options: { selectFirstIfEmpty?: boolean; scope?: "active" | "all" } = {}) {
     // 保留当前选中邮件，避免后台自动同步刷新后页面突然跳回第一封。
-    const response = await apiFetch(`${API_URL}/emails`);
+    const scope = options.scope ?? mailListScope;
+    const response = await apiFetch(`${API_URL}/emails?provider=${scope}`);
     const data = (await response.json()) as EmailRecord[];
     setEmails(data);
     if (options.selectFirstIfEmpty && !selectedIdRef.current && data.length > 0) {
@@ -628,8 +648,9 @@ function App() {
     setSavingMailSource(true);
     setMailSourceError("");
     try {
-      const response = await apiFetch(`${API_URL}/mail/source`, {
-        method: "PUT",
+      const endpoint = mailSourceDraft.auth_mode === "api_oauth" ? `${API_URL}/mail/oauth/start` : `${API_URL}/mail/source`;
+      const response = await apiFetch(endpoint, {
+        method: mailSourceDraft.auth_mode === "api_oauth" ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...mailSourceDraft,
@@ -639,8 +660,17 @@ function App() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail || "连接测试失败，邮件源未切换");
+      if (mailSourceDraft.auth_mode === "api_oauth") {
+        window.location.assign((result as { authorization_url: string }).authorization_url);
+        return;
+      }
       setMailSourceState((result as { state: MailSourceState }).state);
       setMailSourceModalOpen(false);
+      setMailListScope("active");
+      selectedIdRef.current = "";
+      setSelectedId("");
+      await loadEmails({ scope: "active", selectFirstIfEmpty: true });
+      await syncMail();
       window.alert("连接测试通过，邮件源已切换。");
     } catch (error) {
       setMailSourceError(error instanceof Error ? error.message : "连接测试失败，邮件源未切换");
@@ -1064,6 +1094,14 @@ function App() {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    // 用户切换“当前邮箱/全部历史”时重新查询，不修改服务端活动邮件源。
+    if (!currentUser) return;
+    selectedIdRef.current = "";
+    setSelectedId("");
+    loadEmails({ scope: mailListScope, selectFirstIfEmpty: true });
+  }, [mailListScope]);
+
+  useEffect(() => {
     // 自动同步当前邮件源只在浏览器标签可见时运行，减少后台空转请求。
     if (!currentUser) return;
     const syncWhenVisible = () => {
@@ -1076,7 +1114,7 @@ function App() {
       window.clearInterval(timer);
       window.clearTimeout(initialTimer);
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, mailListScope]);
 
   useEffect(() => {
     // 用户看过所有 ready_to_send 邮件后，才允许批量确认发送。
@@ -1177,6 +1215,9 @@ function App() {
                   onRefresh={syncMail}
                   refreshing={syncing}
                   refreshTitle={`${t.refresh}（${mailSourceLabel(mailSourceState?.active_provider)}）`}
+                  listScope={mailListScope}
+                  activeProvider={mailSourceState?.active_provider}
+                  onListScopeChange={setMailListScope}
                   primaryTitle={locale === "zh" ? "客服邮件" : "Support emails"}
                   primaryHint={locale === "zh" ? "需要进入客服处理流程的邮件。" : "Emails that should enter the support workflow."}
                   secondaryTitle={locale === "zh" ? "非客服邮件复核" : "Non-support review"}
@@ -1292,16 +1333,19 @@ function mailSourceLabel(provider?: MailProvider) {
 function emptyMailSourceDraft(provider: MailProvider): MailSourceDraft {
   const imapDefaults = provider === "gmail"
     ? { imap_host: "imap.gmail.com", imap_port: "993", smtp_host: "smtp.gmail.com", smtp_port: "465" }
-    : { imap_host: "imap.qq.com", imap_port: "993", smtp_host: "smtp.qq.com", smtp_port: "465" };
+    : provider === "outlook"
+      ? { imap_host: "outlook.office365.com", imap_port: "993", smtp_host: "smtp-mail.outlook.com", smtp_port: "587" }
+      : { imap_host: "imap.qq.com", imap_port: "993", smtp_host: "smtp.qq.com", smtp_port: "465" };
   return {
     provider,
+    auth_mode: "imap_smtp",
     email_address: "",
     credential: "",
     tenant_id: "",
     client_id: "",
     client_secret: "",
-    redirect_uri: "",
-    ...(provider === "outlook" ? { imap_host: "", imap_port: "", smtp_host: "", smtp_port: "" } : imapDefaults),
+    redirect_uri: provider === "gmail" || provider === "outlook" ? `${window.location.origin}/api/auth/${provider}/callback` : "",
+    ...imapDefaults,
   };
 }
 
@@ -1310,6 +1354,7 @@ function mailSourceDraftFromInfo(provider: MailProvider, source?: MailSourceInfo
   if (!source) return defaults;
   return {
     ...defaults,
+    auth_mode: source.auth_mode || defaults.auth_mode,
     email_address: source.email_address || "",
     imap_host: source.imap_host || defaults.imap_host,
     imap_port: source.imap_port ? String(source.imap_port) : defaults.imap_port,
@@ -1332,7 +1377,8 @@ function MailSourceModal({ draft, state, saving, error, onSelectProvider, onChan
   onSubmit: (event: React.FormEvent) => void;
 }) {
   const source = state?.sources.find((item) => item.provider === draft.provider);
-  const secretHint = source?.secret_configured ? "留空则沿用已保存的认证信息" : "请输入认证信息";
+  const modeSecretConfigured = draft.auth_mode === "api_oauth" ? source?.oauth_secret_configured : source?.imap_secret_configured;
+  const secretHint = modeSecretConfigured ? "留空则沿用已保存的认证信息" : "请输入认证信息";
   return (
     <div className="modalBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="mailSourceModal" role="dialog" aria-modal="true" aria-labelledby="mail-source-title">
@@ -1349,17 +1395,25 @@ function MailSourceModal({ draft, state, saving, error, onSelectProvider, onChan
           ))}
         </div>
         <form className="mailSourceForm" onSubmit={onSubmit}>
-          <label><span>邮箱地址</span><input type="email" required value={draft.email_address} onChange={(event) => onChange("email_address", event.target.value)} placeholder={draft.provider === "outlook" ? "user@company.com" : "name@example.com"} /></label>
-          {draft.provider === "outlook" ? (
+          <fieldset className="authModeFieldset">
+            <legend>接入方式</legend>
+            <div className="authModeSelector">
+              <button type="button" aria-pressed={draft.auth_mode === "imap_smtp"} className={draft.auth_mode === "imap_smtp" ? "active" : ""} onClick={() => onChange("auth_mode", "imap_smtp")}>IMAP + SMTP</button>
+              <button type="button" aria-pressed={draft.auth_mode === "api_oauth"} className={draft.auth_mode === "api_oauth" ? "active" : ""} disabled={draft.provider === "qq"} title={draft.provider === "qq" ? "QQ 邮箱暂不提供此 API OAuth 接入" : "通过官方 API 授权接入"} onClick={() => onChange("auth_mode", "api_oauth")}>API OAuth</button>
+            </div>
+            <small>{draft.provider === "qq" ? "QQ 邮箱使用授权码连接 IMAP/SMTP。" : draft.auth_mode === "api_oauth" ? "将跳转到服务商授权页，系统不会保存邮箱登录密码。" : "使用应用专用密码或邮箱授权码连接。"}</small>
+          </fieldset>
+          <label><span>邮箱地址</span><input type="email" required value={draft.email_address} onChange={(event) => onChange("email_address", event.target.value)} placeholder={draft.provider === "outlook" ? "name@outlook.com" : "name@example.com"} /></label>
+          {draft.auth_mode === "api_oauth" ? (
             <div className="mailSourceFieldGrid">
-              <label><span>Tenant ID</span><input required value={draft.tenant_id} onChange={(event) => onChange("tenant_id", event.target.value)} /></label>
+              {draft.provider === "outlook" && <label><span>授权租户</span><input required value={draft.tenant_id || "consumers"} onChange={(event) => onChange("tenant_id", event.target.value)} placeholder="个人 Outlook 使用 consumers" /></label>}
               <label><span>Client ID</span><input required value={draft.client_id} onChange={(event) => onChange("client_id", event.target.value)} /></label>
-              <label className="wideField"><span>Client Secret</span><input type="password" value={draft.client_secret} onChange={(event) => onChange("client_secret", event.target.value)} placeholder={secretHint} required={!source?.secret_configured} /></label>
-              <label className="wideField"><span>Redirect URI（可选）</span><input value={draft.redirect_uri} onChange={(event) => onChange("redirect_uri", event.target.value)} placeholder="应用权限模式不依赖此字段" /></label>
+              <label className="wideField"><span>Client Secret</span><input type="password" value={draft.client_secret} onChange={(event) => onChange("client_secret", event.target.value)} placeholder={secretHint} required={!modeSecretConfigured} /></label>
+              <label className="wideField"><span>Redirect URI</span><input required value={draft.redirect_uri} onChange={(event) => onChange("redirect_uri", event.target.value)} /></label>
             </div>
           ) : (
             <div className="mailSourceFieldGrid">
-              <label className="wideField"><span>{draft.provider === "qq" ? "QQ 邮箱授权码" : "Gmail 应用专用密码"}</span><input type="password" value={draft.credential} onChange={(event) => onChange("credential", event.target.value)} placeholder={secretHint} required={!source?.secret_configured} /></label>
+              <label className="wideField"><span>{draft.provider === "qq" ? "QQ 邮箱授权码" : `${mailSourceLabel(draft.provider)} 应用专用密码`}</span><input type="password" value={draft.credential} onChange={(event) => onChange("credential", event.target.value)} placeholder={secretHint} required={!modeSecretConfigured} /></label>
               <label><span>IMAP 主机</span><input required value={draft.imap_host} onChange={(event) => onChange("imap_host", event.target.value)} /></label>
               <label><span>IMAP 端口</span><input required type="number" value={draft.imap_port} onChange={(event) => onChange("imap_port", event.target.value)} /></label>
               <label><span>SMTP 主机</span><input required value={draft.smtp_host} onChange={(event) => onChange("smtp_host", event.target.value)} /></label>
@@ -1369,7 +1423,7 @@ function MailSourceModal({ draft, state, saving, error, onSelectProvider, onChan
           {error && <div className="mailSourceError" role="alert">{error}</div>}
           <footer className="mailSourceActions">
             <button type="button" onClick={onClose} disabled={saving}>取消</button>
-            <button type="submit" className="primary" disabled={saving}>{saving ? "正在验证连接..." : "测试并切换"}</button>
+            <button type="submit" className="primary" disabled={saving}>{saving ? (draft.auth_mode === "api_oauth" ? "正在创建授权..." : "正在验证连接...") : (draft.auth_mode === "api_oauth" ? "前往授权" : "测试并切换")}</button>
           </footer>
         </form>
       </section>
@@ -1874,6 +1928,9 @@ function EmailQueue({
   onRefresh,
   refreshing = false,
   refreshTitle,
+  listScope,
+  activeProvider,
+  onListScopeChange,
 }: {
   title: string;
   hint: string;
@@ -1884,6 +1941,9 @@ function EmailQueue({
   onRefresh?: () => void;
   refreshing?: boolean;
   refreshTitle?: string;
+  listScope?: "active" | "all";
+  activeProvider?: MailProvider;
+  onListScopeChange?: (scope: "active" | "all") => void;
   primaryTitle?: string;
   primaryHint?: string;
   secondaryTitle?: string;
@@ -1905,17 +1965,32 @@ function EmailQueue({
     <div className="queuePane">
       <div className="queueHeader">
         <div><h3>{title}</h3><span>{hint}</span></div>
-        {onRefresh && (
-          <button
-            className="iconButton tooltipButton"
-            onClick={onRefresh}
-            disabled={refreshing}
-            aria-label={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}
-            data-tooltip={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}
-          >
-            <RefreshCcw size={16} />
-          </button>
-        )}
+        <div className="queueHeaderActions">
+          {onListScopeChange && (
+            <select
+              className="mailScopeSelect"
+              value={listScope || "active"}
+              aria-label={locale === "zh" ? "邮件来源范围" : "Mail source scope"}
+              onChange={(event) => onListScopeChange(event.target.value as "active" | "all")}
+            >
+              <option value="active">
+                {locale === "zh" ? `当前：${mailSourceLabel(activeProvider)}` : `Current: ${mailSourceLabel(activeProvider)}`}
+              </option>
+              <option value="all">{locale === "zh" ? "全部历史" : "All history"}</option>
+            </select>
+          )}
+          {onRefresh && (
+            <button
+              className="iconButton tooltipButton"
+              onClick={onRefresh}
+              disabled={refreshing}
+              aria-label={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}
+              data-tooltip={refreshTitle || (locale === "zh" ? "刷新邮件" : "Refresh emails")}
+            >
+              <RefreshCcw size={16} />
+            </button>
+          )}
+        </div>
       </div>
       <section className={`queueSection ${openQueueSections.primary ? "open" : ""}`}>
         <button

@@ -11,6 +11,8 @@
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from urllib.parse import urlencode
 
 from app.auth import (
     CurrentUser,
@@ -45,6 +47,8 @@ from app.knowledge import (
 from app.mail_client import MailClientConfigError
 from app.mail_sources import (
     PROVIDER_LABELS,
+    begin_oauth,
+    complete_oauth,
     configure_and_activate,
     fetch_active_emails,
     get_active_provider,
@@ -63,6 +67,7 @@ from app.models import (
     KnowledgeHit,
     KnowledgeSearchRequest,
     MailSourceConfigInput,
+    MailOAuthStartResult,
     MailSourceState,
     MailSourceSwitchResult,
     OperationLog,
@@ -125,13 +130,28 @@ def get_me(current_user: CurrentUser) -> UserProfile:
 
 
 @app.get("/emails", response_model=list[EmailRecord])
-def list_emails(current_user: CurrentUser) -> list[EmailRecord]:
+def list_emails(
+    current_user: CurrentUser,
+    provider: str | None = Query(default=None),
+) -> list[EmailRecord]:
     """返回当前角色有权查看的邮件列表。
 
     Agent 发起升级后即完成权限移交，升级中的邮件只对 manager/admin
     可见；主管取消升级后，邮件会重新回到 Agent 的列表中。
     """
-    return [email for email in store.list() if can_user_access_email(current_user.role, email)]
+    # 默认只展示当前活动邮箱，避免切换邮箱后把 QQ、Gmail、Outlook 的工单
+    # 混在同一队列里。provider=all 用于人工查看历史邮件，但不会改变活动邮箱。
+    active_provider = get_active_provider()
+    selected_provider = active_provider if provider in (None, "", "active") else provider
+    if selected_provider not in {"all", "manual", "qq", "outlook", "gmail"}:
+        raise HTTPException(status_code=400, detail="不支持的邮件来源筛选条件")
+
+    return [
+        email
+        for email in store.list()
+        if can_user_access_email(current_user.role, email)
+        and (selected_provider == "all" or email.provider == selected_provider)
+    ]
 
 
 @app.get("/emails/{email_id}", response_model=EmailRecord)
@@ -369,6 +389,36 @@ def switch_mail_source(
         detail={"operator": current_user.username, "previous_provider": previous, "provider": payload.provider},
     )
     return MailSourceSwitchResult(message="连接测试通过，邮件源已切换。", state=state)
+
+
+@app.post("/mail/oauth/start", response_model=MailOAuthStartResult)
+def start_mail_oauth(
+    payload: MailSourceConfigInput,
+    _: UserProfile = Depends(require_roles(["admin"])),
+) -> MailOAuthStartResult:
+    """生成 Gmail 或 Outlook 的授权地址，尚不改动当前活动邮件源。"""
+    try:
+        return MailOAuthStartResult(authorization_url=begin_oauth(payload))
+    except MailClientConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/auth/{provider}/callback")
+def mail_oauth_callback(provider: str, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+    """接收 OAuth 回调，完成授权后回到前端系统设置。"""
+    if provider not in {"gmail", "outlook"}:
+        return RedirectResponse(url="/?mail_oauth=error&message=unsupported_provider", status_code=302)
+    if error or not code or not state:
+        message = error or "authorization_cancelled"
+        return RedirectResponse(url=f"/?{urlencode({'mail_oauth': 'error', 'provider': provider, 'message': message})}", status_code=302)
+    try:
+        complete_oauth(provider, code=code, state=state)  # type: ignore[arg-type]
+    except MailClientConfigError as exc:
+        return RedirectResponse(
+            url=f"/?{urlencode({'mail_oauth': 'error', 'provider': provider, 'message': str(exc)[:240]})}",
+            status_code=302,
+        )
+    return RedirectResponse(url=f"/?{urlencode({'mail_oauth': 'success', 'provider': provider})}", status_code=302)
 
 
 @app.post("/mail/import")
