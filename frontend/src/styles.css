@@ -847,14 +847,15 @@ h3 {
 }
 
 .inboxStack .queueSection {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 
 .inboxStack .queueSection.open {
   display: flex;
-  flex: 1 1 0;
   flex-direction: column;
+  flex: 0 1 auto;
   min-height: 0;
 }
 
@@ -1734,9 +1735,9 @@ h3 {
 }
 
 .inboxStack .queueSectionList {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
-  max-height: none;
+  max-height: calc(148px * 5 + 10px * 4);
 }
 
 .secondaryEmailList {
@@ -1744,7 +1745,7 @@ h3 {
 }
 
 .inboxStack .secondaryEmailList {
-  max-height: none;
+  max-height: calc(104px * 5 + 10px * 4);
 }
 
 .secondaryEmailList .emailItem {
