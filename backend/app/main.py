@@ -404,12 +404,20 @@ def start_mail_oauth(
 
 
 @app.get("/auth/{provider}/callback")
-def mail_oauth_callback(provider: str, code: str = "", state: str = "", error: str = "") -> RedirectResponse:
+def mail_oauth_callback(
+    provider: str,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_description: str = "",
+) -> RedirectResponse:
     """接收 OAuth 回调，完成授权后回到前端系统设置。"""
     if provider not in {"gmail", "outlook"}:
         return RedirectResponse(url="/?mail_oauth=error&message=unsupported_provider", status_code=302)
     if error or not code or not state:
-        message = error or "authorization_cancelled"
+        # OAuth 服务商通常会在 error_description 中返回可操作的失败原因。
+        # 优先透传该字段，避免前端只能看到笼统的 access_denied。
+        message = error_description or error or "authorization_cancelled"
         return RedirectResponse(url=f"/?{urlencode({'mail_oauth': 'error', 'provider': provider, 'message': message})}", status_code=302)
     try:
         complete_oauth(provider, code=code, state=state)  # type: ignore[arg-type]
