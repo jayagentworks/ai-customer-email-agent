@@ -29,6 +29,7 @@ class SemanticAnalysisResult(BaseModel):
     """
 
     category: Literal["refund", "complaint", "technical", "billing", "product_question", "other"]
+    is_support_request: bool
     confidence: float = Field(ge=0, le=1)
     risk_level: Literal["low", "medium", "high"]
     risk_flags: list[str] = Field(default_factory=list)
@@ -72,7 +73,17 @@ def analyze_email_with_llm(
                 "role": "system",
                 "content": (
                     "You are a customer support email semantic analysis agent. "
-                    "Return only valid JSON. Do not include markdown. "
+                    "First decide whether the sender is asking OUR customer support team to answer a question "
+                    "or solve a concrete customer need. The is_support_request boolean is the authoritative "
+                    "routing decision and must never be inferred merely from category, confidence, or risk. "
+                    "Set is_support_request to true only when the sender/customer is requesting an answer, "
+                    "investigation, correction, refund, technical assistance, or another concrete support action. "
+                    "Set it to false when the sender is offering help, introducing a product, welcoming or "
+                    "onboarding the recipient, sending marketing/newsletters, platform notifications, security "
+                    "notices, verification codes, surveys, recommendations, or other messages that do not ask "
+                    "OUR support team to solve a customer problem. Words such as help, support, issue, or problem "
+                    "alone are insufficient; identify who is asking whom for help. "
+                    "Return only valid JSON matching the requested schema. Do not include markdown or extra text. "
                     "Categories must be one of: refund, complaint, technical, billing, product_question, other. "
                     "Risk level must be one of: low, medium, high. "
                     "Use the input language for risk_flags and reason."
@@ -88,6 +99,7 @@ def analyze_email_with_llm(
                         "preprocessing_flags": preprocessing_flags,
                         "required_json_schema": {
                             "category": "refund|complaint|technical|billing|product_question|other",
+                            "is_support_request": "boolean; true only when the sender asks support to answer or solve a customer need",
                             "confidence": "number between 0 and 1",
                             "risk_level": "low|medium|high",
                             "risk_flags": ["short risk reason strings"],

@@ -47,6 +47,7 @@ class EmailWorkflowState(TypedDict, total=False):
 
     email: EmailRecord
     use_llm: bool
+    semantic_is_support_request: bool
 
 
 def process_email(email: EmailRecord, use_llm: bool = True) -> EmailRecord:
@@ -169,7 +170,7 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
                 confidence=email.confidence,
             )
         )
-        return {"email": email}
+        return {"email": email, "semantic_is_support_request": llm_result.is_support_request}
 
     category, confidence, matched = classify_semantically(text)
     is_chinese = email.detected_language == "zh"
@@ -242,6 +243,16 @@ def semantic_relevance_gate_node(state: EmailWorkflowState) -> EmailWorkflowStat
     防止继续进入 RAG 和回复生成。
     """
     email = state["email"]
+    semantic_decision = state.get("semantic_is_support_request")
+    if semantic_decision is False:
+        mark_irrelevant_email(
+            email,
+            "Semantic analysis explicitly classified this message as not being a customer support request.",
+            step_name="Semantic relevance gate",
+            confidence=max(0.9, email.confidence),
+        )
+        return {"email": email}
+
     should_filter, reason = should_filter_after_semantic_analysis(email)
     if not should_filter:
         email.steps.append(
@@ -338,6 +349,8 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
         "recommendation", "digest", "community update", "retiring", "deprecation",
         "terms of service", "service terms", "privacy settings", "recommendation available",
         "new recommendation", "default directory",
+        "welcome", "welcome to", "get started", "getting started", "onboarding",
+        "activate your account", "complete your profile", "explore features", "product tour",
         "oauth application", "third-party oauth", "first-party github oauth",
         "authorized to access your account", "security events", "security-log",
         "settings/security-log", "do not forward this email", "facebook.com",
@@ -374,6 +387,17 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
     has_direct_customer_request = any(term in text for term in direct_customer_request_terms)
     has_strong_business_request = any(term in text for term in strong_business_request_terms)
     has_platform_security_signal = from_platform and any(term in text for term in security_notification_terms)
+    has_lifecycle_marketing_signal = any(
+        term in text
+        for term in {
+            "welcome", "welcome to", "get started", "getting started", "onboarding",
+            "activate your account", "complete your profile", "explore features", "product tour",
+        }
+    )
+    has_unsubscribe_signal = any(
+        term in text
+        for term in {"unsubscribe", "manage preferences", "email preferences", "opt out"}
+    )
     has_policy_update_signal = any(
         term in text
         for term in {"服务条款", "隐私设置", "terms of service", "privacy settings", "new recommendation", "recommendation available"}
@@ -381,6 +405,8 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
 
     if has_platform_security_signal:
         return False, "Detected platform security notification without a customer support request."
+    if has_lifecycle_marketing_signal and has_unsubscribe_signal and not has_strong_business_request:
+        return False, "Detected welcome or onboarding email with marketing unsubscribe signals and no concrete customer issue."
     if from_platform and has_policy_update_signal:
         return False, "Detected platform policy, privacy, or recommendation notification without a customer support request."
     if from_platform and not has_strong_business_request:
@@ -390,7 +416,7 @@ def is_customer_support_request(email: EmailRecord) -> tuple[bool, str]:
 
     support_terms = {
         "refund", "invoice", "billing", "charged", "duplicate", "login", "password", "access",
-        "workspace", "cannot", "can't", "failed", "help", "support", "issue", "problem",
+        "workspace", "cannot", "can't", "failed", "issue", "problem",
         "退款", "退费", "发票", "账单", "扣费", "重复扣费", "登录", "密码", "无法", "不能",
         "帮", "帮助", "问题", "故障", "打不开", "开票", "保修", "订单", "物流",
     }
@@ -424,11 +450,13 @@ def should_filter_after_semantic_analysis(email: EmailRecord) -> tuple[bool, str
     sender = f"{email.customer_name} {email.customer_email}".lower()
     non_support_signals = {
         "marketing", "promotion", "newsletter", "notification", "platform notification",
+        "welcome email", "welcome message", "onboarding email", "getting started email",
         "security alert", "verification code", "oauth application", "policy update",
         "privacy settings", "terms of service", "recommendation", "digest",
         "no customer issue", "without a customer support request", "no customer support",
         "no direct customer request", "openai marketing", "product update",
         "system notification", "does not involve customer support", "not a customer support request",
+        "not a support request", "not a support issue", "not a customer request",
         "营销", "推广", "通知", "平台通知", "安全提醒", "验证码", "隐私设置",
         "服务条款", "推荐", "无客户问题", "没有客户问题", "无客服问题",
         "无客户诉求", "没有客户诉求", "非客服", "营销邮件", "系统通知",
