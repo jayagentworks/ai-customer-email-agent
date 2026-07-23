@@ -1,0 +1,6459 @@
+{
+  "generated_at": "2026-07-23T08:59:20+00:00",
+  "dataset_path": "/app/backend/evaluation/dataset.jsonl",
+  "with_rag": true,
+  "metrics": {
+    "dataset": {
+      "cases": 200,
+      "support_cases": 140,
+      "non_support_cases": 60,
+      "languages": {
+        "zh": 100,
+        "en": 100
+      },
+      "tags": {
+        "refund": 28,
+        "duplicate_charge": 2,
+        "zh": 100,
+        "cancellation": 2,
+        "follow_up": 2,
+        "subscription": 2,
+        "en": 100,
+        "billing": 28,
+        "invoice": 2,
+        "tax": 2,
+        "procurement": 2,
+        "receipt": 6,
+        "technical": 28,
+        "login": 2,
+        "password_reset": 2,
+        "sso": 2,
+        "access": 2,
+        "product": 8,
+        "pro_plan": 2,
+        "integration": 2,
+        "workspace": 2,
+        "audit_log": 2,
+        "complaint": 28,
+        "repeated_contact": 2,
+        "incident": 2,
+        "sla": 2,
+        "churn": 2,
+        "non_support": 60,
+        "security_notification": 2,
+        "verification_code": 2,
+        "newsletter": 4,
+        "marketing": 2,
+        "notification": 2,
+        "terms_update": 2,
+        "survey": 4,
+        "deprecation": 4,
+        "welcome": 4,
+        "automatic_receipt": 2,
+        "duplicate-charge": 2,
+        "extended": 140,
+        "refund-arrival": 2,
+        "bank-authorization": 2,
+        "charged-after-cancel": 2,
+        "unauthorized-renewal": 2,
+        "cross-currency-refund": 2,
+        "refund-proof": 2,
+        "cancel-current-cycle": 2,
+        "large-refund-dispute": 2,
+        "refund-status": 2,
+        "invoice-delay": 2,
+        "invoice-title-change": 2,
+        "tax-id": 2,
+        "annual-contract-invoice": 2,
+        "purchase-order": 2,
+        "contract-payment": 2,
+        "invoice-address": 2,
+        "annual-discount": 2,
+        "billing-reconciliation": 2,
+        "expired-reset-link": 2,
+        "verification-code": 2,
+        "locked-account": 2,
+        "oauth-error": 2,
+        "unknown-login": 2,
+        "api-timeout": 2,
+        "partial-outage": 2,
+        "sso-member-access": 2,
+        "mfa-loop": 2,
+        "workspace-access": 2,
+        "product_question": 20,
+        "team-workspace": 2,
+        "role-permission": 2,
+        "audit-log": 2,
+        "webhook-api": 2,
+        "sso-integration": 2,
+        "priority-support": 2,
+        "plan-fit": 2,
+        "compliance-promise": 2,
+        "pricing-contract": 2,
+        "feature-comparison": 2,
+        "slow-response": 2,
+        "production-blocked": 2,
+        "refund-complaint": 2,
+        "legal-threat": 2,
+        "cancel-account": 2,
+        "data-concern": 2,
+        "missed-sla": 2,
+        "multiple-members": 2,
+        "angry-customer": 2,
+        "status-demand": 2,
+        "github-code": 2,
+        "oauth-added": 2,
+        "password-notice": 2,
+        "login-alert": 2,
+        "promotion": 2,
+        "webinar": 2,
+        "terms": 2,
+        "privacy": 2,
+        "status-resolved": 2,
+        "maintenance": 2,
+        "release": 2,
+        "invoice-generated": 2,
+        "delivery": 2,
+        "job-alert": 2,
+        "social": 2
+      }
+    },
+    "support_detection": {
+      "accuracy": 0.93,
+      "precision": 0.9701,
+      "recall": 0.9286,
+      "f1": 0.9489,
+      "confusion_matrix": {
+        "true_positive": 130,
+        "false_positive": 4,
+        "false_negative": 10,
+        "true_negative": 56
+      }
+    },
+    "category": {
+      "accuracy": 0.6154,
+      "macro_f1": 0.6782,
+      "per_label": {
+        "refund": {
+          "support": 27,
+          "precision": 0.6944,
+          "recall": 0.9259,
+          "f1": 0.7937
+        },
+        "billing": {
+          "support": 27,
+          "precision": 0.9286,
+          "recall": 0.4815,
+          "f1": 0.6341
+        },
+        "technical": {
+          "support": 24,
+          "precision": 0.8095,
+          "recall": 0.7083,
+          "f1": 0.7556
+        },
+        "product_question": {
+          "support": 27,
+          "precision": 0.7895,
+          "recall": 0.5556,
+          "f1": 0.6522
+        },
+        "complaint": {
+          "support": 25,
+          "precision": 0.9091,
+          "recall": 0.4,
+          "f1": 0.5556
+        }
+      }
+    },
+    "risk": {
+      "accuracy": 0.5231,
+      "macro_f1": 0.523,
+      "per_label": {
+        "low": {
+          "support": 23,
+          "precision": 0.3125,
+          "recall": 0.8696,
+          "f1": 0.4598
+        },
+        "medium": {
+          "support": 55,
+          "precision": 0.7576,
+          "recall": 0.4545,
+          "f1": 0.5682
+        },
+        "high": {
+          "support": 52,
+          "precision": 0.697,
+          "recall": 0.4423,
+          "f1": 0.5412
+        }
+      }
+    },
+    "language_accuracy": 1.0,
+    "errors": 0,
+    "rag": {
+      "evaluated_cases": 140,
+      "recall_at_1": 0.7143,
+      "recall_at_3": 0.9429,
+      "mrr": 0.8179,
+      "precision_at_3": 0.3452,
+      "average_latency_ms": 590.2,
+      "p95_latency_ms": 355
+    }
+  },
+  "failures": [
+    {
+      "id": "refund-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 644,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "refund-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "product_question",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 371,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "refund-zh-04",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "refund",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 309,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "billing-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 265,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "billing-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "billing-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "billing-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "product_question",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "technical-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 355,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "product-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "technical",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 331,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "complaint-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 323,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "complaint-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieval_latency_ms": 308,
+      "error": "",
+      "failed_metrics": [
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "complaint-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 315,
+      "error": "",
+      "failed_metrics": [
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "complaint-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 319,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "complaint-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 301,
+      "error": "",
+      "failed_metrics": [
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "nonsupport-zh-04",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "nonsupport-zh-07",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "nonsupport-en-07",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 300,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 300,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 293,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 309,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 281,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "billing",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 367,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 267,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.93,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 297,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 297,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 302,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 340,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 331,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-refund-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 292,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "complaint",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 342,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 20186,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 295,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 321,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 305,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-en-05",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 274,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-billing-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 305,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 289,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 260,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-billing-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-zh-02",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 305,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-technical-en-02",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 283,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-technical-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "test_samples/account_security_image_reference.pdf",
+        "login_troubleshooting.md"
+      ],
+      "retrieval_latency_ms": 270,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-en-04",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 348,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-technical-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 306,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "test_samples/account_security_image_reference.pdf",
+        "login_troubleshooting.md"
+      ],
+      "retrieval_latency_ms": 306,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "product_question",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-en-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "product_question",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 335,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/service_incident_response.md",
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 318,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 319,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-technical-zh-09",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 288,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-technical-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-product_question-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 290,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "technical",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 358,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-product_question-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "technical",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 20052,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-03",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 282,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-product_question-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 276,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-product_question-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 289,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 286,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-product_question-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 278,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 313,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-product_question-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 269,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-product_question-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 301,
+      "error": "",
+      "failed_metrics": [
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-01",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 318,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 292,
+      "error": "",
+      "failed_metrics": [
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 307,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 291,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk",
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieval_latency_ms": 302,
+      "error": "",
+      "failed_metrics": [
+        "category"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-04",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 298,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieval_latency_ms": 350,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 328,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 320,
+      "error": "",
+      "failed_metrics": [
+        "risk",
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-06",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 310,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 315,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 311,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk",
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 293,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk",
+        "rag_recall_at_3"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 332,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 313,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-complaint-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 324,
+      "error": "",
+      "failed_metrics": [
+        "category",
+        "risk"
+      ]
+    },
+    {
+      "id": "ext-nonsupport-zh-17",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "billing",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": "",
+      "failed_metrics": [
+        "support_detection"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "id": "refund-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 644,
+      "error": ""
+    },
+    {
+      "id": "refund-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "product_question",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 371,
+      "error": ""
+    },
+    {
+      "id": "refund-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 322,
+      "error": ""
+    },
+    {
+      "id": "refund-zh-04",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "refund",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 309,
+      "error": ""
+    },
+    {
+      "id": "refund-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.94,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 335,
+      "error": ""
+    },
+    {
+      "id": "refund-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 308,
+      "error": ""
+    },
+    {
+      "id": "refund-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 279,
+      "error": ""
+    },
+    {
+      "id": "refund-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 279,
+      "error": ""
+    },
+    {
+      "id": "billing-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 310,
+      "error": ""
+    },
+    {
+      "id": "billing-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 265,
+      "error": ""
+    },
+    {
+      "id": "billing-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": ""
+    },
+    {
+      "id": "billing-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 268,
+      "error": ""
+    },
+    {
+      "id": "billing-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": ""
+    },
+    {
+      "id": "billing-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 311,
+      "error": ""
+    },
+    {
+      "id": "billing-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "product_question",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": ""
+    },
+    {
+      "id": "billing-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 289,
+      "error": ""
+    },
+    {
+      "id": "technical-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.93,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 285,
+      "error": ""
+    },
+    {
+      "id": "technical-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.93,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 287,
+      "error": ""
+    },
+    {
+      "id": "technical-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 276,
+      "error": ""
+    },
+    {
+      "id": "technical-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 355,
+      "error": ""
+    },
+    {
+      "id": "technical-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "test_samples/account_security_image_reference.pdf",
+        "login_troubleshooting.md"
+      ],
+      "retrieval_latency_ms": 338,
+      "error": ""
+    },
+    {
+      "id": "technical-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 313,
+      "error": ""
+    },
+    {
+      "id": "technical-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 300,
+      "error": ""
+    },
+    {
+      "id": "technical-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/sla_priority_table.pdf",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 319,
+      "error": ""
+    },
+    {
+      "id": "product-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.93,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 322,
+      "error": ""
+    },
+    {
+      "id": "product-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 312,
+      "error": ""
+    },
+    {
+      "id": "product-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 331,
+      "error": ""
+    },
+    {
+      "id": "product-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 307,
+      "error": ""
+    },
+    {
+      "id": "product-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.94,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 320,
+      "error": ""
+    },
+    {
+      "id": "product-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 292,
+      "error": ""
+    },
+    {
+      "id": "product-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 353,
+      "error": ""
+    },
+    {
+      "id": "product-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "technical",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 331,
+      "error": ""
+    },
+    {
+      "id": "complaint-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 312,
+      "error": ""
+    },
+    {
+      "id": "complaint-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 313,
+      "error": ""
+    },
+    {
+      "id": "complaint-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 323,
+      "error": ""
+    },
+    {
+      "id": "complaint-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieval_latency_ms": 308,
+      "error": ""
+    },
+    {
+      "id": "complaint-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 306,
+      "error": ""
+    },
+    {
+      "id": "complaint-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 315,
+      "error": ""
+    },
+    {
+      "id": "complaint-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 319,
+      "error": ""
+    },
+    {
+      "id": "complaint-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 301,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-01",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-02",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-03",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-04",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-05",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-06",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-07",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-08",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-09",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-zh-10",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-01",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-02",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-03",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-04",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-05",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-06",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-07",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-08",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-09",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "nonsupport-en-10",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 300,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 289,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 300,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 293,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 309,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 281,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 314,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "billing",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 367,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 267,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 311,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.93,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 297,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.93,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 297,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 302,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 340,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 298,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 321,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 331,
+      "error": ""
+    },
+    {
+      "id": "ext-refund-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "refund",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md"
+      ],
+      "retrieved_sources": [
+        "refund_policy.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 307,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 292,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 310,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "complaint",
+      "expected_risk": "medium",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 342,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 20186,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 283,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 295,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 321,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 305,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-05",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 274,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 291,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 305,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 273,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 268,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 289,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "billing_invoice_policy.md"
+      ],
+      "retrieval_latency_ms": 260,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "refund",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": ""
+    },
+    {
+      "id": "ext-billing-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "billing",
+      "predicted_category": "billing",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "billing_invoice_policy.md"
+      ],
+      "retrieved_sources": [
+        "billing_invoice_policy.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieval_latency_ms": 303,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 283,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 279,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-02",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 305,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-02",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 283,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/service_incident_response.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 303,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "test_samples/account_security_image_reference.pdf",
+        "login_troubleshooting.md"
+      ],
+      "retrieval_latency_ms": 270,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-04",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 348,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 306,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "test_samples/account_security_image_reference.pdf",
+        "login_troubleshooting.md"
+      ],
+      "retrieval_latency_ms": 306,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "product_question",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "product_question",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 335,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/service_incident_response.md",
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf"
+      ],
+      "retrieval_latency_ms": 318,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 319,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 294,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "test_samples/sla_priority_table.pdf"
+      ],
+      "retrieval_latency_ms": 310,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-09",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf",
+        "test_samples/service_incident_response.md"
+      ],
+      "retrieval_latency_ms": 288,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "login_troubleshooting.md",
+        "uploads/企业客服知识库测试_合同SLA与数据安全_可读版.pdf",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": ""
+    },
+    {
+      "id": "ext-technical-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "technical",
+      "predicted_category": "technical",
+      "expected_risk": "medium",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "login_troubleshooting.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/sla_priority_table.pdf",
+        "login_troubleshooting.md",
+        "test_samples/account_security_image_reference.pdf"
+      ],
+      "retrieval_latency_ms": 567,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 300,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 290,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "technical",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 358,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "technical",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 20052,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-03",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 296,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 279,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 282,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 312,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 281,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 271,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 276,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 289,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 286,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 278,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "product_faq.md",
+        "test_samples/enterprise_purchase_checklist.txt"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 313,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "other",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 269,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "medium",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/enterprise_purchase_checklist.txt",
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "product_faq.md"
+      ],
+      "retrieval_latency_ms": 301,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.93,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": ""
+    },
+    {
+      "id": "ext-product_question-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "product_question",
+      "predicted_category": "product_question",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.86,
+      "expected_sources": [
+        "product_faq.md"
+      ],
+      "retrieved_sources": [
+        "product_faq.md",
+        "test_samples/privacy_data_request_text_layer.pdf"
+      ],
+      "retrieval_latency_ms": 273,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-01",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-01",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 275,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "technical",
+      "expected_risk": "high",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 318,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-02",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 292,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 307,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-03",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "refund",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.79,
+      "expected_sources": [
+        "refund_policy.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 291,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-04",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "high",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieval_latency_ms": 302,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-04",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 298,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieval_latency_ms": 350,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-05",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/scanned_cancellation_policy_ocr.pdf"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 328,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-06",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "complaint",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.79,
+      "expected_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 320,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-06",
+      "expected_support": true,
+      "predicted_support": false,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 310,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 315,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-07",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 311,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 293,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-08",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/service_incident_response.md",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/scanned_cancellation_policy_ocr.pdf",
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieval_latency_ms": 299,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc",
+        "sla_escalation_policy.md"
+      ],
+      "retrieval_latency_ms": 317,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-09",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 332,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-zh-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "sla_escalation_policy.md",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 313,
+      "error": ""
+    },
+    {
+      "id": "ext-complaint-en-10",
+      "expected_support": true,
+      "predicted_support": true,
+      "expected_category": "complaint",
+      "predicted_category": "other",
+      "expected_risk": "high",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.58,
+      "expected_sources": [
+        "test_samples/complaint_escalation_policy.docx",
+        "sla_escalation_policy.md"
+      ],
+      "retrieved_sources": [
+        "test_samples/privacy_data_request_text_layer.pdf",
+        "test_samples/complaint_escalation_policy.docx",
+        "test_samples/complaint_escalation_policy.doc"
+      ],
+      "retrieval_latency_ms": 324,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-01",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-01",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-02",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-02",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-03",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-03",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-04",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-04",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-05",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-05",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-06",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-06",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-07",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-07",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-08",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-08",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-09",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-09",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-10",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-10",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-11",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-11",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-12",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-12",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-13",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-13",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-14",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-14",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-15",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-15",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-16",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-16",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-17",
+      "expected_support": false,
+      "predicted_support": true,
+      "expected_category": "other",
+      "predicted_category": "billing",
+      "expected_risk": "low",
+      "predicted_risk": "medium",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.86,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-17",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-18",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-18",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-19",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-19",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-zh-20",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "zh",
+      "predicted_language": "zh",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    },
+    {
+      "id": "ext-nonsupport-en-20",
+      "expected_support": false,
+      "predicted_support": false,
+      "expected_category": "other",
+      "predicted_category": "other",
+      "expected_risk": "low",
+      "predicted_risk": "low",
+      "expected_language": "en",
+      "predicted_language": "en",
+      "confidence": 0.0,
+      "expected_sources": [],
+      "retrieved_sources": [],
+      "retrieval_latency_ms": 0,
+      "error": ""
+    }
+  ]
+}

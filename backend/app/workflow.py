@@ -30,6 +30,7 @@ import os
 import time
 
 from app.models import AgentMetrics, EmailRecord, WorkflowStep
+from app.risk import assess_email_risk, contains_any, merge_llm_risk
 
 
 WorkflowRoute = Literal["relevant", "irrelevant"]
@@ -101,12 +102,12 @@ def preprocess_node(state: EmailWorkflowState) -> EmailWorkflowState:
     preprocess_rules = [
         ({"refund", "退款", "退费"}, "payment_change"),
         ({"cancel", "取消"}, "churn_risk"),
-        ({"legal", "lawyer", "法律", "律师", "起诉"}, "legal_risk"),
+        ({"legal action", "legal threat", "lawyer", "sue", "法律行动", "律师", "起诉"}, "legal_risk"),
         ({"third email", "第三次", "多次"}, "repeated_contact"),
         ({"blocked", "阻塞", "无法使用"}, "business_blocked"),
     ]
     email.preprocessing_flags = [
-        flag for terms, flag in preprocess_rules if any(term in text for term in terms)
+        flag for terms, flag in preprocess_rules if contains_any(text, terms)
     ]
     if email.attachments:
         email.preprocessing_flags.append("has_attachment")
@@ -156,6 +157,27 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
 
     if llm_result:
         apply_llm_analysis(email, llm_result)
+        rule_risk = assess_email_risk(
+            email_context,
+            email.category,
+            email.preprocessing_flags,
+            email.detected_language,
+        )
+        llm_risk_level = email.risk_level
+        email.risk_level, email.risk_flags = merge_llm_risk(
+            email.risk_level,
+            email.risk_flags,
+            rule_risk,
+        )
+        email.should_escalate = email.risk_level == "high"
+        email.priority = email.risk_level
+        if email.risk_level != llm_risk_level:
+            guardrail_note = (
+                "确定性风险护栏检测到不可降级的强风险信号，已提高最终风险等级。"
+                if email.detected_language == "zh"
+                else "The deterministic risk guardrail found a non-downgradable signal and raised the final risk level."
+            )
+            email.analysis_reason = f"{email.analysis_reason} {guardrail_note}".strip()
         email.agent_metrics.output_tokens += estimate_tokens(email.analysis_reason) + sum(estimate_tokens(flag) for flag in email.risk_flags) + 30
         update_estimated_cost(email)
         detail = email.analysis_reason
@@ -173,50 +195,19 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
         return {"email": email, "semantic_is_support_request": llm_result.is_support_request}
 
     category, confidence, matched = classify_semantically(text)
-    is_chinese = email.detected_language == "zh"
-    risk_rules = [
-        (
-            {"refund", "退款", "退费"},
-            "Refund or payment change requires review before sending.",
-            "退款或付款变更需要人工审核后才能发送。",
-        ),
-        (
-            {"cancel", "取消"},
-            "Cancellation risk should be handled by a specialist.",
-            "客户存在取消风险，需要客服专员介入。",
-        ),
-        (
-            {"legal", "法律", "律师"},
-            "Legal language requires human review.",
-            "邮件包含法律或律师相关表达，需要人工审核。",
-        ),
-        (
-            {"third email", "第三次", "多次"},
-            "Repeated contact indicates customer frustration.",
-            "客户多次联系，说明情绪或问题升级。",
-        ),
-        (
-            {"blocked", "阻塞", "无法使用"},
-            "Blocked business workflow increases urgency.",
-            "客户业务流程受阻，需要提高处理优先级。",
-        ),
-    ]
-    risk_flags = [
-        chinese_message if is_chinese else english_message
-        for terms, english_message, chinese_message in risk_rules
-        if any(term in text for term in terms)
-    ]
-    strong_flag_count = len(set(email.preprocessing_flags))
-    risk_level = "high" if risk_flags or strong_flag_count >= 2 else ("medium" if category in {"technical", "billing"} else "low")
+    risk = assess_email_risk(
+        email_context,
+        category,
+        email.preprocessing_flags,
+        email.detected_language,
+    )
 
     email.category = category
     email.confidence = confidence
-    email.risk_level = risk_level
-    email.risk_flags = [
-        *risk_flags,
-    ]
-    email.should_escalate = risk_level == "high"
-    email.priority = risk_level
+    email.risk_level = risk.level
+    email.risk_flags = list(risk.flags)
+    email.should_escalate = risk.level == "high"
+    email.priority = risk.level
     email.analysis_reason = build_analysis_reason(email, matched)
     if llm_error:
         email.analysis_reason = f"{email.analysis_reason} LLM fallback reason: {llm_error}"
@@ -225,7 +216,7 @@ def semantic_analysis_node(state: EmailWorkflowState) -> EmailWorkflowState:
         WorkflowStep(
             name="Semantic analysis",
             status="warning" if email.should_escalate else "complete",
-            summary=f"{category.replace('_', ' ')} / {risk_level} risk / {confidence:.0%} confidence",
+            summary=f"{category.replace('_', ' ')} / {risk.level} risk / {confidence:.0%} confidence",
             detail=email.analysis_reason,
             confidence=confidence,
         )
