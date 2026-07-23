@@ -11,6 +11,9 @@
 而是尽量提取对客服回复有用、结构清晰、噪声较少的知识文本。
 """
 
+import csv
+import io
+import os
 import re
 import shutil
 import subprocess
@@ -19,6 +22,7 @@ from tempfile import TemporaryDirectory
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.ocr_repair_client import OCRRepairError, repair_ocr_text
 from app.vision_client import VisionClientError, describe_image
 
 
@@ -69,6 +73,9 @@ class ParseReport:
     section_count: int = 0
     table_count: int = 0
     image_count: int = 0
+    ocr_page_count: int = 0
+    ocr_llm_repaired_pages: int = 0
+    ocr_pages: list[dict] | None = None
     extracted_assets: list[dict] | None = None
     warnings: list[str] | None = None
 
@@ -84,6 +91,9 @@ class ParseReport:
             "section_count": self.section_count,
             "table_count": self.table_count,
             "image_count": self.image_count,
+            "ocr_page_count": self.ocr_page_count,
+            "ocr_llm_repaired_pages": self.ocr_llm_repaired_pages,
+            "ocr_pages": self.ocr_pages or [],
             "extracted_assets": self.extracted_assets or [],
             "warnings": self.warnings or [],
         }
@@ -96,6 +106,75 @@ class ParsedDocument:
     title: str
     chunks: list[ParsedChunk]
     report: ParseReport
+
+
+@dataclass(frozen=True)
+class OCRWord:
+    """Tesseract TSV 返回的单词及其页面坐标。"""
+
+    text: str
+    confidence: float
+    block_number: int
+    paragraph_number: int
+    line_number: int
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class OCRTextBlock:
+    """由 OCR 单词合并出的文本块，用于恢复多栏阅读顺序。"""
+
+    text: str
+    confidence: float
+    left: int
+    top: int
+    width: int
+    height: int
+
+    @property
+    def right(self) -> int:
+        return self.left + self.width
+
+    @property
+    def bottom(self) -> int:
+        return self.top + self.height
+
+    @property
+    def center_x(self) -> float:
+        return self.left + self.width / 2
+
+
+@dataclass(frozen=True)
+class OCRPageResult:
+    """一页 OCR 的最终文本、质量指标和修复审计信息。"""
+
+    text: str
+    raw_text: str = ""
+    average_confidence: float = 0.0
+    quality_score: float = 0.0
+    multi_column: bool = False
+    layout_reordered: bool = False
+    llm_repaired: bool = False
+    repair_model: str = ""
+    repair_changes: tuple[str, ...] = ()
+    warning: str = ""
+    assets: tuple[dict, ...] = ()
+
+    def to_report(self, page_number: int) -> dict:
+        return {
+            "page_number": page_number,
+            "average_confidence": round(self.average_confidence, 4),
+            "quality_score": round(self.quality_score, 4),
+            "multi_column": self.multi_column,
+            "layout_reordered": self.layout_reordered,
+            "llm_repaired": self.llm_repaired,
+            "repair_model": self.repair_model,
+            "repair_changes": list(self.repair_changes),
+            "warning": self.warning,
+        }
 
 
 def parse_document(path: Path) -> ParsedDocument:
@@ -150,6 +229,9 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
     total_noise_lines = 0
     pages_with_text = 0
     pages_with_ocr = 0
+    pages_repaired_by_llm = 0
+    ocr_page_reports: list[dict] = []
+    ocr_assets: list[dict] = []
     warnings: list[str] = []
     table_chunks, table_count = extract_pdf_table_chunks(path)
     image_chunks, image_assets = extract_pdf_image_reference_chunks(path)
@@ -158,10 +240,20 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
         raw_text = page.extract_text() or ""
         text_source = "text-layer"
         if not raw_text.strip():
-            raw_text = ocr_pdf_page(path, page_index)
+            ocr_result = ocr_pdf_page(
+                path,
+                page_index,
+                visual_context=image_context_for_page(image_assets, page_index),
+            )
+            raw_text = ocr_result.text
             text_source = "ocr"
             if raw_text.strip():
                 pages_with_ocr += 1
+                pages_repaired_by_llm += int(ocr_result.llm_repaired)
+                ocr_page_reports.append(ocr_result.to_report(page_index))
+                ocr_assets.extend(ocr_result.assets)
+                if ocr_result.warning:
+                    warnings.append(f"Page {page_index} OCR warning: {ocr_result.warning}")
             else:
                 warnings.append(f"Page {page_index} had no extractable text and OCR returned no text.")
 
@@ -186,9 +278,14 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
 
     if pages_with_text < len(reader.pages):
         warnings.append(f"{len(reader.pages) - pages_with_text} page(s) had no extractable text.")
+    parser_name = "pypdf"
+    if pages_with_ocr:
+        parser_name += " + tesseract-ocr"
+    if pages_repaired_by_llm:
+        parser_name += " + qwen-ocr-repair"
     report = ParseReport(
         file_type="pdf",
-        parser="pypdf + tesseract-ocr" if pages_with_ocr else "pypdf",
+        parser=parser_name,
         original_chars=total_original_chars,
         cleaned_chars=total_cleaned_chars,
         noise_lines_removed=total_noise_lines,
@@ -197,7 +294,10 @@ def parse_pdf_document(path: Path) -> ParsedDocument:
         section_count=count_sections(page_chunks),
         table_count=table_count,
         image_count=len(image_assets),
-        extracted_assets=image_assets,
+        ocr_page_count=pages_with_ocr,
+        ocr_llm_repaired_pages=pages_repaired_by_llm,
+        ocr_pages=ocr_page_reports,
+        extracted_assets=[*image_assets, *ocr_assets],
         warnings=warnings,
     )
     return ParsedDocument(title=extract_title(first_text, path.stem), chunks=page_chunks, report=report)
@@ -366,19 +466,32 @@ def normalize_image_extension(value: str) -> str:
     return extension[:8]
 
 
-def ocr_pdf_page(path: Path, page_number: int) -> str:
-    """对单页 PDF 做本地 OCR。
+def image_context_for_page(image_assets: list[dict], page_number: int) -> str:
+    """汇总同页视觉说明，只作为 OCR 校对上下文。"""
+    descriptions = [
+        str(asset.get("description", "")).strip()
+        for asset in image_assets
+        if asset.get("page_number") == page_number and asset.get("description")
+    ]
+    return "\n".join(description for description in descriptions if description)
 
-    OCR 依赖两个本地命令：
-    - ``pdftoppm``：把 PDF 页面渲染成图片。
-    - ``tesseract``：对渲染后的图片做中英文 OCR。
 
-    如果任一工具不可用或识别失败，返回空字符串，让上层记录 warning。
+def ocr_pdf_page(
+    path: Path,
+    page_number: int,
+    *,
+    visual_context: str = "",
+) -> OCRPageResult:
+    """对单页 PDF 做“坐标恢复 + 质量门控 + 可选 LLM 修复”。
+
+    Tesseract 首先输出 TSV，系统根据文本块坐标恢复双栏阅读顺序，并计算平均识别
+    置信度和可读质量。只有多栏页或质量低于阈值时才调用 LLM；模型修复失败不会
+    中断入库，而是回退到本地排序后的文本。
     """
     pdftoppm = find_executable("pdftoppm")
     tesseract = find_executable("tesseract")
     if not pdftoppm or not tesseract:
-        return ""
+        return OCRPageResult(text="", warning="pdftoppm_or_tesseract_missing")
 
     with TemporaryDirectory(prefix="pdf-ocr-") as tmp:
         output_prefix = Path(tmp) / f"page-{page_number}"
@@ -397,34 +510,330 @@ def ocr_pdf_page(path: Path, page_number: int) -> str:
         try:
             render_result = subprocess.run(render_command, capture_output=True, text=True, timeout=60)
         except (OSError, subprocess.TimeoutExpired):
-            return ""
+            return OCRPageResult(text="", warning="pdf_page_render_failed")
         if render_result.returncode != 0:
-            return ""
+            return OCRPageResult(text="", warning="pdf_page_render_failed")
 
         rendered_pages = sorted(Path(tmp).glob(f"{output_prefix.name}-*.png"))
         if not rendered_pages:
             rendered_pages = sorted(Path(tmp).glob("*.png"))
         if not rendered_pages:
-            return ""
+            return OCRPageResult(text="", warning="rendered_page_not_found")
 
-        ocr_texts: list[str] = []
+        page_results: list[OCRPageResult] = []
         for image_path in rendered_pages:
-            ocr_command = [
+            tsv_command = [
                 str(tesseract),
                 str(image_path),
                 "stdout",
                 "-l",
                 "chi_sim+eng",
                 "--psm",
-                "6",
+                "3",
+                "tsv",
             ]
             try:
-                ocr_result = subprocess.run(ocr_command, capture_output=True, text=True, timeout=90)
+                tsv_result = subprocess.run(tsv_command, capture_output=True, text=True, timeout=90)
             except (OSError, subprocess.TimeoutExpired):
                 continue
-            if ocr_result.returncode == 0 and ocr_result.stdout.strip():
-                ocr_texts.append(ocr_result.stdout.strip())
-        return "\n\n".join(ocr_texts).strip()
+            if tsv_result.returncode != 0 or not tsv_result.stdout.strip():
+                continue
+            words = parse_tesseract_tsv(tsv_result.stdout)
+            if not words:
+                continue
+            blocks = build_ocr_blocks(words)
+            ordered_blocks, multi_column, layout_reordered = order_ocr_blocks(blocks)
+            raw_text = "\n\n".join(block.text for block in blocks if block.text.strip()).strip()
+            ordered_text = "\n\n".join(block.text for block in ordered_blocks if block.text.strip()).strip()
+            average_confidence = weighted_ocr_confidence(words)
+            quality_score = score_ocr_quality(ordered_text, average_confidence, ordered_blocks)
+            page_results.append(
+                finalize_ocr_page(
+                    path,
+                    page_number,
+                    raw_text=raw_text,
+                    ordered_text=ordered_text,
+                    average_confidence=average_confidence,
+                    quality_score=quality_score,
+                    multi_column=multi_column,
+                    layout_reordered=layout_reordered,
+                    visual_context=visual_context,
+                )
+            )
+
+        if not page_results:
+            return OCRPageResult(text="", warning="tesseract_returned_no_text")
+        if len(page_results) == 1:
+            return page_results[0]
+
+        combined_text = "\n\n".join(result.text for result in page_results if result.text.strip())
+        combined_raw = "\n\n".join(result.raw_text for result in page_results if result.raw_text.strip())
+        all_assets = tuple(asset for result in page_results for asset in result.assets)
+        return OCRPageResult(
+            text=combined_text,
+            raw_text=combined_raw,
+            average_confidence=sum(result.average_confidence for result in page_results) / len(page_results),
+            quality_score=sum(result.quality_score for result in page_results) / len(page_results),
+            multi_column=any(result.multi_column for result in page_results),
+            layout_reordered=any(result.layout_reordered for result in page_results),
+            llm_repaired=any(result.llm_repaired for result in page_results),
+            repair_model=next((result.repair_model for result in page_results if result.repair_model), ""),
+            repair_changes=tuple(change for result in page_results for change in result.repair_changes),
+            warning="; ".join(result.warning for result in page_results if result.warning),
+            assets=all_assets,
+        )
+
+
+def parse_tesseract_tsv(tsv_text: str) -> list[OCRWord]:
+    """把 Tesseract TSV 转成带坐标的单词，忽略空白和无效置信度记录。"""
+    words: list[OCRWord] = []
+    reader = csv.DictReader(io.StringIO(tsv_text), delimiter="\t")
+    for row in reader:
+        text = clean_inline_text(row.get("text") or "")
+        if not text:
+            continue
+        try:
+            confidence = float(row.get("conf") or -1)
+            if confidence < 0:
+                continue
+            words.append(
+                OCRWord(
+                    text=text,
+                    confidence=confidence / 100,
+                    block_number=int(row.get("block_num") or 0),
+                    paragraph_number=int(row.get("par_num") or 0),
+                    line_number=int(row.get("line_num") or 0),
+                    left=int(row.get("left") or 0),
+                    top=int(row.get("top") or 0),
+                    width=int(row.get("width") or 0),
+                    height=int(row.get("height") or 0),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return words
+
+
+def build_ocr_blocks(words: list[OCRWord]) -> list[OCRTextBlock]:
+    """按 Tesseract block/paragraph/line 合并单词，同时保留块坐标。"""
+    grouped: dict[tuple[int, int], list[OCRWord]] = {}
+    for word in words:
+        grouped.setdefault((word.block_number, word.paragraph_number), []).append(word)
+
+    blocks: list[OCRTextBlock] = []
+    for block_words in grouped.values():
+        line_groups: dict[int, list[OCRWord]] = {}
+        for word in block_words:
+            line_groups.setdefault(word.line_number, []).append(word)
+        line_texts: list[tuple[int, str]] = []
+        for line_words in line_groups.values():
+            ordered_words = sorted(line_words, key=lambda item: item.left)
+            line_text = smart_join_ocr_words([item.text for item in ordered_words])
+            line_texts.append((min(item.top for item in ordered_words), line_text))
+        block_text = "\n".join(text for _, text in sorted(line_texts) if text).strip()
+        if not block_text:
+            continue
+        left = min(word.left for word in block_words)
+        top = min(word.top for word in block_words)
+        right = max(word.left + word.width for word in block_words)
+        bottom = max(word.top + word.height for word in block_words)
+        total_area = sum(max(1, word.width * word.height) for word in block_words)
+        confidence = safe_ratio(
+            sum(word.confidence * max(1, word.width * word.height) for word in block_words),
+            total_area,
+        )
+        blocks.append(
+            OCRTextBlock(
+                text=block_text,
+                confidence=confidence,
+                left=left,
+                top=top,
+                width=max(1, right - left),
+                height=max(1, bottom - top),
+            )
+        )
+    return sorted(blocks, key=lambda item: (item.top, item.left))
+
+
+def order_ocr_blocks(blocks: list[OCRTextBlock]) -> tuple[list[OCRTextBlock], bool, bool]:
+    """识别左右双栏并按“左栏读完，再读右栏”恢复阅读顺序。"""
+    if len(blocks) < 4:
+        return blocks, False, False
+    page_left = min(block.left for block in blocks)
+    page_right = max(block.right for block in blocks)
+    page_width = max(1, page_right - page_left)
+    center = page_left + page_width / 2
+    narrow_blocks = [block for block in blocks if block.width <= page_width * 0.58]
+    left_column = [
+        block for block in narrow_blocks
+        if block.center_x < center - page_width * 0.02
+        and block.right <= center + page_width * 0.08
+    ]
+    right_column = [
+        block for block in narrow_blocks
+        if block.center_x > center + page_width * 0.02
+        and block.left >= center - page_width * 0.08
+    ]
+    if len(left_column) < 2 or len(right_column) < 2:
+        return blocks, False, False
+
+    overlap_top = max(min(block.top for block in left_column), min(block.top for block in right_column))
+    overlap_bottom = min(max(block.bottom for block in left_column), max(block.bottom for block in right_column))
+    if overlap_bottom <= overlap_top:
+        return blocks, False, False
+
+    column_top = min(min(block.top for block in left_column), min(block.top for block in right_column))
+    column_bottom = max(max(block.bottom for block in left_column), max(block.bottom for block in right_column))
+    left_ids = {id(block) for block in left_column}
+    right_ids = {id(block) for block in right_column}
+    headers = [block for block in blocks if block.bottom < column_top and id(block) not in left_ids | right_ids]
+    footers = [block for block in blocks if block.top > column_bottom and id(block) not in left_ids | right_ids]
+    middle_other = [
+        block
+        for block in blocks
+        if id(block) not in left_ids | right_ids
+        and block not in headers
+        and block not in footers
+    ]
+    ordered = [
+        *sorted(headers, key=lambda item: (item.top, item.left)),
+        *sorted(left_column, key=lambda item: (item.top, item.left)),
+        *sorted(middle_other, key=lambda item: (item.top, item.left)),
+        *sorted(right_column, key=lambda item: (item.top, item.left)),
+        *sorted(footers, key=lambda item: (item.top, item.left)),
+    ]
+    original_ids = [id(block) for block in blocks]
+    return ordered, True, [id(block) for block in ordered] != original_ids
+
+
+def smart_join_ocr_words(words: list[str]) -> str:
+    """连接 OCR 单词；中文字符间不加空格，英文单词间保留空格。"""
+    result = ""
+    for word in words:
+        if not result:
+            result = word
+            continue
+        previous = result[-1]
+        current = word[0]
+        needs_space = (
+            previous.isascii()
+            and current.isascii()
+            and previous.isalnum()
+            and current.isalnum()
+        )
+        result += (" " if needs_space else "") + word
+    return result.strip()
+
+
+def weighted_ocr_confidence(words: list[OCRWord]) -> float:
+    weights = [max(1, len(word.text)) for word in words]
+    return safe_ratio(
+        sum(word.confidence * weight for word, weight in zip(words, weights)),
+        sum(weights),
+    )
+
+
+def safe_ratio(numerator: float, denominator: float) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def score_ocr_quality(
+    text: str,
+    average_confidence: float,
+    blocks: list[OCRTextBlock],
+) -> float:
+    """综合字符可读性、Tesseract 置信度和碎片程度计算 0～1 质量分。"""
+    if not text.strip():
+        return 0.0
+    readability = readable_ratio(text)
+    suspicious_chars = len(re.findall(r"[�□■◆◇]{1}|\\x[0-9a-fA-F]{2}", text))
+    symbol_penalty = min(1.0, suspicious_chars / max(1, len(text)) * 20)
+    short_blocks = sum(len(block.text.strip()) < 8 for block in blocks)
+    structure_score = 1 - safe_ratio(short_blocks, max(1, len(blocks)))
+    quality = (
+        average_confidence * 0.55
+        + readability * 0.30
+        + structure_score * 0.15
+        - symbol_penalty * 0.20
+    )
+    return round(max(0.0, min(1.0, quality)), 4)
+
+
+def finalize_ocr_page(
+    path: Path,
+    page_number: int,
+    *,
+    raw_text: str,
+    ordered_text: str,
+    average_confidence: float,
+    quality_score: float,
+    multi_column: bool,
+    layout_reordered: bool,
+    visual_context: str = "",
+) -> OCRPageResult:
+    """按质量门控决定是否调用 LLM，并保存原始与最终文本供审计。"""
+    final_text = ordered_text or raw_text
+    repair_model = ""
+    repair_changes: tuple[str, ...] = ()
+    warning = ""
+    # Tesseract 可能对“形似但语义错误”的汉字给出很高字符置信度，例如把“策略”
+    # 识别成“梨略”。默认阈值因此保持得较严格，让这类页面也进入保守的语义校对。
+    threshold = float(os.getenv("OCR_LLM_REPAIR_THRESHOLD", "0.96"))
+    should_repair = bool(final_text) and (quality_score < threshold or multi_column)
+    if should_repair:
+        try:
+            repaired = repair_ocr_text(
+                final_text,
+                document_name=path.name,
+                page_number=page_number,
+                quality_score=quality_score,
+                visual_context=visual_context,
+            )
+            if repaired:
+                final_text = repaired.text
+                repair_model = repaired.model
+                repair_changes = repaired.changes
+        except OCRRepairError as exc:
+            warning = str(exc)
+
+    raw_asset = save_ocr_text_asset(path, page_number, "raw", raw_text)
+    final_asset = save_ocr_text_asset(path, page_number, "repaired" if repair_model else "ordered", final_text)
+    assets = (
+        build_ocr_asset(raw_asset, page_number, "ocr_raw"),
+        build_ocr_asset(final_asset, page_number, "ocr_repaired" if repair_model else "ocr_ordered"),
+    )
+    return OCRPageResult(
+        text=final_text,
+        raw_text=raw_text,
+        average_confidence=average_confidence,
+        quality_score=quality_score,
+        multi_column=multi_column,
+        layout_reordered=layout_reordered,
+        llm_repaired=bool(repair_model),
+        repair_model=repair_model,
+        repair_changes=repair_changes,
+        warning=warning,
+        assets=assets,
+    )
+
+
+def save_ocr_text_asset(path: Path, page_number: int, variant: str, text: str) -> Path:
+    EXTRACTED_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    digest = sha256(text.encode("utf-8")).hexdigest()[:12]
+    asset_name = f"{safe_asset_name(path.stem)}-p{page_number}-ocr-{variant}-{digest}.txt"
+    asset_path = EXTRACTED_ASSETS_DIR / asset_name
+    if not asset_path.exists():
+        asset_path.write_text(text, encoding="utf-8")
+    return asset_path
+
+
+def build_ocr_asset(path: Path, page_number: int, asset_type: str) -> dict:
+    return {
+        "type": asset_type,
+        "path": path.relative_to(EXTRACTED_ASSETS_DIR.parent).as_posix(),
+        "page_number": page_number,
+        "size_bytes": path.stat().st_size,
+    }
 
 
 def parse_docx_document(path: Path) -> ParsedDocument:

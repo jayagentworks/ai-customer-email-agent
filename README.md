@@ -123,6 +123,13 @@ text layer with `pypdf`; if a page has no extractable text, it renders that page
 with `pdftoppm` and runs local `tesseract` OCR with `chi_sim+eng`. This keeps
 normal text PDFs fast while still supporting scanned Chinese/English PDFs.
 
+For OCR pages, Tesseract emits TSV coordinates and confidence values. The parser
+restores multi-column reading order locally and calculates a page-level quality
+score. Multi-column or lower-quality pages are sent to `Qwen/Qwen3-14B` for
+constrained correction. Amounts, dates, identifiers, email addresses, and URLs
+are protected from modification, while raw and repaired text are saved
+separately for auditing. Model failures fall back to locally ordered OCR text.
+
 PDF tables are extracted with `pdfplumber` and indexed as Markdown table chunks,
 so row/column relationships are preserved better than plain text extraction.
 Embedded PDF images are saved under `backend/knowledge_docs/extracted_assets/`
@@ -225,6 +232,9 @@ Important variables:
 - `LLM_BASE_URL`: OpenAI-compatible chat completion endpoint.
 - `LLM_MODEL`: default `deepseek-ai/DeepSeek-V4-Flash`.
 - `VISION_MODEL`: default `Qwen/Qwen3-VL-8B-Instruct` for PDF image descriptions.
+- `OCR_LLM_REPAIR_ENABLED`: enables quality-gated OCR correction; defaults to `true`.
+- `OCR_REPAIR_MODEL`: defaults to `Qwen/Qwen3-14B`.
+- `OCR_LLM_REPAIR_THRESHOLD`: defaults to `0.96`.
 - `EMBEDDING_BASE_URL`: OpenAI-compatible embedding endpoint.
 - `EMBEDDING_MODEL`: default `Qwen/Qwen3-Embedding-0.6B`.
 - `QQ_EMAIL_ADDRESS`: QQ mailbox address.
@@ -257,6 +267,30 @@ Backend:
 ```powershell
 .\.venv\Scripts\python.exe -m compileall backend\app
 ```
+
+### Offline Evaluation
+
+The repository includes a manually labelled, privacy-safe regression dataset
+covering Chinese and English support emails, non-support filtering, category
+classification, risk decisions, and document-level RAG retrieval.
+
+Run the zero-external-call rule baseline:
+
+```powershell
+cd backend
+python evaluation/evaluate.py
+```
+
+Run the retrieval baseline against the configured knowledge base:
+
+```powershell
+python evaluation/evaluate.py --with-rag
+```
+
+The RAG command may call the configured embedding API, but it does not generate
+replies or send email. Reports are written to
+`backend/evaluation/reports/`. Metric definitions and dataset details are in
+[backend/evaluation/README.md](backend/evaluation/README.md).
 
 ## Resume Notes
 
