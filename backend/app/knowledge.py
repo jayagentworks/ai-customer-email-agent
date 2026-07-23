@@ -529,12 +529,116 @@ def delete_knowledge_document(document_id: str) -> None:
         path.unlink()
 
 
+SEMANTIC_RERANK_WEIGHT = 0.48
+KEYWORD_RERANK_WEIGHT = 0.34
+CATEGORY_RERANK_WEIGHT = 0.18
+
+ENGLISH_SEARCH_STOP_WORDS = {
+    "about",
+    "after",
+    "again",
+    "also",
+    "and",
+    "are",
+    "before",
+    "but",
+    "can",
+    "could",
+    "does",
+    "for",
+    "from",
+    "has",
+    "have",
+    "help",
+    "how",
+    "into",
+    "need",
+    "our",
+    "please",
+    "should",
+    "that",
+    "the",
+    "their",
+    "this",
+    "through",
+    "was",
+    "what",
+    "when",
+    "where",
+    "which",
+    "will",
+    "with",
+    "would",
+    "your",
+}
+CHINESE_SEARCH_STOP_WORDS = {
+    "一个",
+    "一些",
+    "什么",
+    "可以",
+    "如何",
+    "客户",
+    "客服",
+    "已经",
+    "我们",
+    "是否",
+    "系统",
+    "请问",
+    "这个",
+    "需要",
+    "问题",
+}
+CROSS_LANGUAGE_TERM_GROUPS = (
+    {"password", "reset", "expired", "密码", "重置", "过期"},
+    {"login", "sign in", "access", "workspace", "登录", "访问", "工作区"},
+    {"verification code", "code", "验证码"},
+    {"oauth", "authorization", "permission", "permissions", "授权", "权限"},
+    {"mfa", "multi factor", "多因素认证"},
+    {
+        "incident",
+        "outage",
+        "timeout",
+        "timed out",
+        "unavailable",
+        "production",
+        "blocked",
+        "error",
+        "status page",
+        "故障",
+        "中断",
+        "超时",
+        "不可用",
+        "生产",
+        "受阻",
+        "错误",
+        "状态页",
+    },
+    {"team", "members", "affected", "impact", "团队", "成员", "影响"},
+    {"complaint", "unhappy", "dissatisfied", "投诉", "不满"},
+    {"supervisor", "escalate", "priority", "主管", "升级", "优先级"},
+    {"follow up", "repeated", "催促", "多次来信"},
+    {"sla", "response time", "响应时间", "时效"},
+    {"privacy", "personal data", "data export", "deletion", "隐私", "个人数据", "数据导出", "删除"},
+    {"refund", "duplicate charge", "charged twice", "退款", "重复扣费"},
+    {"authorization hold", "pending charge", "preauthorization", "预授权", "待处理扣款"},
+    {"renewal", "cancelled", "cancellation", "续费", "取消订阅"},
+    {"invoice", "billing", "receipt", "发票", "账单", "收据"},
+    {"tax id", "invoice title", "credit note", "税号", "发票抬头", "红冲"},
+    {"purchase order", "vendor", "quotation", "procurement", "采购订单", "供应商", "报价单", "采购"},
+    {"plan", "pro", "feature", "套餐", "功能", "版本"},
+    {"role", "roles", "read only", "角色", "只读"},
+    {"audit log", "audit", "审计日志", "审计"},
+    {"integration", "webhook", "api", "集成", "接口"},
+    {"contract", "pricing", "discount", "合同", "报价", "折扣"},
+)
+
+
 def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -> list[KnowledgeHit]:
     """RAG 检索入口。
 
     检索分两步：
     1. 用 pgvector 根据邮件 query embedding 召回一批候选 chunk。
-    2. 在应用层做轻量重排：语义分 55%、关键词分 30%、分类分 15%。
+    2. 在应用层做轻量重排：语义分 48%、关键词分 34%、分类分 18%。
 
     这里默认返回 Top-3，是因为回复生成真正需要的是少量高质量依据。
     Top-K 太大虽然召回更宽，但会增加 token 成本，也更容易把无关知识塞给 LLM。
@@ -559,12 +663,26 @@ def retrieve_knowledge(text: str, category: str | None = None, limit: int = 3) -
             rows = session.scalars(statement).all()
 
     scored: list[tuple[float, KnowledgeChunkORM, float, float, float, str]] = []
-    query_terms = extract_terms(text)
+    query_terms = expand_cross_language_terms(extract_terms(text))
     for row in rows:
         vector_score = cosine_similarity(query_embedding, row.embedding or [])
-        keyword_score = keyword_overlap(query_terms, row.content)
-        category_score = 1.0 if category and row.category == category else 0.0
-        score = max(0.0, min(0.99, vector_score * 0.55 + keyword_score * 0.30 + category_score * 0.15))
+        searchable_content = f"{row.title}\n{row.source}\n{row.content}"
+        keyword_score = keyword_overlap(query_terms, searchable_content)
+        category_score = category_alignment_score(
+            category,
+            query_terms,
+            row.category,
+            searchable_content,
+        )
+        score = max(
+            0.0,
+            min(
+                0.99,
+                vector_score * SEMANTIC_RERANK_WEIGHT
+                + keyword_score * KEYWORD_RERANK_WEIGHT
+                + category_score * CATEGORY_RERANK_WEIGHT,
+            ),
+        )
         if category_score > 0 and (keyword_score > 0 or vector_score > 0):
             score = max(score, 0.24)
         if score >= 0.18:
@@ -1077,12 +1195,37 @@ def build_query(text: str, category: str | None) -> str:
 
 def extract_terms(text: str) -> set[str]:
     lower = text.lower()
-    terms = set(re.findall(r"[a-z0-9_]+", lower))
+    english_tokens = [
+        token
+        for token in re.findall(r"[a-z0-9_]+", lower)
+        if (len(token) >= 3 or token in {"api", "sso", "mfa"})
+        and token not in ENGLISH_SEARCH_STOP_WORDS
+    ]
+    terms = set(english_tokens)
+    # 完整短语比单个常见词更能区分“密码重置”和“服务事故”等子意图。
+    for size in (2, 3):
+        terms.update(
+            " ".join(english_tokens[index : index + size])
+            for index in range(0, max(0, len(english_tokens) - size + 1))
+        )
     chinese_runs = re.findall(r"[\u4e00-\u9fff]+", lower)
     for run in chinese_runs:
         for size in (2, 3, 4):
-            terms.update(run[index : index + size] for index in range(0, max(0, len(run) - size + 1)))
+            terms.update(
+                term
+                for index in range(0, max(0, len(run) - size + 1))
+                if (term := run[index : index + size]) not in CHINESE_SEARCH_STOP_WORDS
+            )
     return terms
+
+
+def expand_cross_language_terms(query_terms: set[str]) -> set[str]:
+    """按业务同义词组补齐中英文词项，支持跨语言邮件检索中文知识库。"""
+    expanded = set(query_terms)
+    for group in CROSS_LANGUAGE_TERM_GROUPS:
+        if query_terms & group:
+            expanded.update(group)
+    return expanded
 
 
 def category_keyword_terms(category: str | None) -> set[str]:
@@ -1103,6 +1246,13 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "sso",
             "webhook",
             "api",
+            "role",
+            "roles",
+            "read only",
+            "priority support",
+            "compliance",
+            "pricing",
+            "contract",
             "产品",
             "功能",
             "套餐",
@@ -1115,6 +1265,12 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "审计",
             "日志",
             "集成",
+            "角色",
+            "只读",
+            "优先支持",
+            "合规",
+            "报价",
+            "合同",
         },
         "refund": {
             "refund",
@@ -1124,6 +1280,11 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "billing",
             "invoice",
             "payment",
+            "authorization",
+            "renewal",
+            "cancelled",
+            "cancellation",
+            "original payment",
             "退款",
             "退费",
             "重复",
@@ -1132,6 +1293,10 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "账单",
             "支付",
             "发票",
+            "预授权",
+            "续费",
+            "取消订阅",
+            "原路退回",
         },
         "billing": {
             "invoice",
@@ -1139,11 +1304,23 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "receipt",
             "tax",
             "payment",
+            "title",
+            "vendor",
+            "quotation",
+            "purchase order",
+            "contract",
+            "bank transfer",
             "账单",
             "发票",
             "收据",
             "税务",
             "支付",
+            "抬头",
+            "供应商",
+            "报价单",
+            "采购订单",
+            "合同",
+            "转账",
         },
         "technical": {
             "login",
@@ -1152,12 +1329,30 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "sso",
             "access",
             "workspace",
+            "reset",
+            "verification code",
+            "oauth",
+            "mfa",
+            "timeout",
+            "incident",
+            "outage",
+            "production",
+            "error",
+            "status page",
             "登录",
             "密码",
             "重置",
             "访问",
             "工作区",
             "令牌",
+            "验证码",
+            "多因素认证",
+            "超时",
+            "故障",
+            "服务异常",
+            "生产环境",
+            "错误码",
+            "状态页",
         },
         "complaint": {
             "complaint",
@@ -1166,12 +1361,28 @@ def category_keyword_terms(category: str | None) -> set[str]:
             "legal",
             "blocked",
             "escalate",
+            "supervisor",
+            "incident",
+            "outage",
+            "production",
+            "sla",
+            "repeated",
+            "follow up",
+            "privacy",
+            "data export",
             "投诉",
             "不满",
             "取消",
             "法律",
             "律师",
             "升级",
+            "主管",
+            "故障",
+            "中断",
+            "生产",
+            "多次催促",
+            "隐私",
+            "数据导出",
         },
     }
     return terms_by_category.get(category or "", set())
@@ -1181,8 +1392,53 @@ def keyword_overlap(query_terms: set[str], content: str) -> float:
     if not query_terms:
         return 0.0
     lower = content.lower()
-    matches = sum(1 for term in query_terms if term in lower)
-    return min(1.0, matches / 5)
+    matched_weights = sorted(
+        (search_term_weight(term) for term in query_terms if term in lower),
+        reverse=True,
+    )
+    # 只累计最有辨识度的六个词项，避免长邮件凭借大量普通词自然取得满分。
+    return min(1.0, sum(matched_weights[:6]) / 8.0)
+
+
+def category_alignment_score(
+    category: str | None,
+    query_terms: set[str],
+    row_category: str | None,
+    content: str,
+) -> float:
+    """计算分类一致性，并用类别内子意图词区分同类文档。
+
+    pgvector 候选通常已经按粗类别过滤，因此旧版二元分类分在同类候选之间完全相同。
+    这里保留 0.65 的粗类别基础分，再根据邮件与文档共同命中的类别关键词增加最多
+    0.35，使“技术问题”内部还能区分登录、OAuth、服务事故等具体方向。
+    """
+    if not category or category == "other" or row_category != category:
+        return 0.0
+    category_terms = category_keyword_terms(category)
+    intent_terms = query_terms & category_terms
+    if not intent_terms:
+        return 0.65
+    lower = content.lower()
+    matched = sum(search_term_weight(term) for term in intent_terms if term in lower)
+    total = sum(search_term_weight(term) for term in intent_terms)
+    return min(1.0, 0.65 + 0.35 * safe_ratio(matched, total))
+
+
+def search_term_weight(term: str) -> float:
+    """给长词和完整短语更高权重，降低普通短词对排序的干扰。"""
+    if " " in term:
+        return min(2.4, 1.4 + 0.2 * len(term.split()))
+    if re.fullmatch(r"[\u4e00-\u9fff]+", term):
+        return {2: 0.8, 3: 1.1, 4: 1.4}.get(len(term), 1.4)
+    if len(term) >= 9:
+        return 1.4
+    if len(term) >= 6:
+        return 1.15
+    return 0.8
+
+
+def safe_ratio(numerator: float, denominator: float) -> float:
+    return numerator / denominator if denominator else 0.0
 
 
 def build_match_reason(vector_score: float, keyword_score: float, category_score: float) -> str:

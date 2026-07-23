@@ -72,7 +72,7 @@ two stages:
 
 1. PostgreSQL + pgvector recalls semantic candidates using vector distance.
 2. The backend reranks those candidates with the existing hybrid score:
-   `0.55 * semantic + 0.35 * keyword + 0.10 * category`.
+   `0.48 * semantic + 0.34 * keyword + 0.18 * category`.
 
 If pgvector is not available in a local database, the system falls back to the
 previous application-layer cosine similarity over JSON embeddings.
